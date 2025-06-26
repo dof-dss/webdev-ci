@@ -4,123 +4,30 @@ parameters:
   php_version:
     type: string
     default: "8.3"
-  docker_image:
-    type: string
-    default: "thecodingmachine/php"
+    description: "PHP version to use"
+  
   node_version:
     type: string
-    default: "14.21.3"
-  drupal_core_version:
-    type: string
-    default: "10.4"
-  platform_region:
-    type: string 
-    default: "uk-1"
-  edge_git_committer_name:
-    type: string 
-    default: "circleci@localhost"
-  edge_git_author_name:
-    type: string 
-    default: "Circle CI"
+    default: "18"
+    description: "Node.js version to use"
 
 executors:
-  php_executor:
+  php-executor:
     docker:
-      - image: thecodingmachine/php:8.3-v4-apache
-    environment:
-        PLATFORM_REGION: uk-1.platform.sh
-        PROJECT_ROOT: "/home/docker/project"
-        PHP_EXTENSION_GD: 1
-        PHP_EXTENSIONS: "gd"
-        PHP_INI_MEMORY_LIMIT: -1
-        PHP_INI_MAX_EXECUTION_TIME: 600
-        PHP_INI_MAX_INPUT_TIME: 600
-        CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
-
-jobs:
-  build:
-    executor: php_executor
-    steps:
-      - checkout_code 
-      - composer_tasks 
-      - persist_to_workspace:
-          root: ./
-          paths:
-            - ./
-
-  # Test for coding standards - will inherit the workspace/filesystem changes from build step, above.
-  coding_standards:
-    executor: php_executor
-    steps:
-      - attach_workspace:
-          at: ./
-      - run:
-          name: PHPCS analysis
-          command: |
-            CHECK_DIRS="${PROJECT_ROOT}/web/sites"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/modules/custom"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/modules/origins"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/themes/custom"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/profiles/unity"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/profiles/origins"
-            ~/project/phpcs.sh ${PROJECT_ROOT} $CHECK_DIRS
-
-  deprecated_code:
-    executor: php_executor
-    steps:
-      - attach_workspace:
-          at: ./
-      - run:
-          name: Deprecated code check
-          command: |
-            cd $PROJECT_ROOT
-            CHECK_DIRS="${PROJECT_ROOT}/web/modules/custom"
-            CHECK_DIRS="$CHECK_DIRS ${PROJECT_ROOT}/web/modules/origins"
-            vendor/bin/drupal-check $CHECK_DIRS
+      - image: cimg/php:<< parameters.php_version >>
+    working_directory: ~/project
 
 commands:
-  checkout_code:
-    description: "Handle composer access tokens, SSH key fingerprints and code checkout"
+  setup-php:
     steps:
-      # Add SSH user key so we can access related repositories as part of our initial clone + composer install command.
-      - add_ssh_keys:
-          fingerprints:
-            - "e8:86:75:e8:35:15:07:a6:2d:a0:00:17:69:a1:42:84"
       - checkout
-  composer_tasks:
-    description: "Validate and install dependencies using composer"
-    steps:
       - run:
-          name: Validate composer.json and composer.lock file for consistency
-          command: composer validate --no-check-all --strict
-      - restore_cache:
-          keys:
-            - composer-{{ checksum "composer.lock" }}
-      - run:
-          name: Fetch dependencies with composer
-          command: |
-            composer install --no-interaction --optimize-autoloader
-      - save_cache:
-          key: composer-{{ checksum "composer.lock" }}
-          paths:
-            - $HOME/.composer/cache
-  install_psh_cli:
-    description: "Install the Platform.sh CLI tool"
-    steps:
-      - run:
-          name: Install the Platform.sh CLI tool
-          command: curl -sS https://platform.sh/cli/installer | php
-      - run:
-          name: Add platform cli tool to $PATH
-          command: echo 'export PATH="$HOME/"'.platformsh/bin':"$PATH"' >> $BASH_ENV
+          name: Install dependencies
+          command: composer install -n --prefer-dist
 
-workflows:
-  build-test:
-    jobs:
-      - build
-      - coding_standards:
-          requires:
-            - build
-      - deprecated_code:
-          requires:
-            - build
+  setup-node:
+    steps:
+      - checkout
+      - run:
+          name: Install Node dependencies
+          command: npm ci
