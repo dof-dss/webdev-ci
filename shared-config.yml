@@ -26,9 +26,9 @@ parameters:
 executors:
   php_executor:
     docker:
-      - image: << parameters.docker_image >>:<< parameters.php_version >>-v4-apache
+      - image: thecodingmachine/php:8.3-v4-apache
     environment:
-        PLATFORM_REGION: << parameters.platform_region >>.platform.sh
+        PLATFORM_REGION: uk-1.platform.sh
         PROJECT_ROOT: "/home/docker/project"
         PHP_EXTENSION_GD: 1
         PHP_EXTENSIONS: "gd"
