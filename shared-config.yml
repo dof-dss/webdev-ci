@@ -76,16 +76,25 @@ commands:
       - run:
           name: Validate composer.json and composer.lock file for consistency
           command: composer validate --no-check-all --strict
+
       - restore_cache:
           keys:
-            - composer-{{ checksum "composer.lock" }}
+            - composer-vendor-{{ checksum "composer.lock" }}
+
       - run:
-          name: Fetch dependencies with composer
-          command: composer install --no-interaction --optimize-autoloader
+          name: Install dependencies (if vendor/ missing)
+          command: |
+            if [ ! -d vendor ]; then
+              composer install --no-interaction --optimize-autoloader
+            else
+              echo "Vendor directory exists, skipping install."
+            fi
+
       - save_cache:
-          key: composer-{{ checksum "composer.lock" }}
+          key: composer-vendor-{{ checksum "composer.lock" }}
           paths:
-            - $HOME/.composer/cache
+            - vendor
+            - ~/.composer/cache
 
 # Workflow definitions.
 workflows:
