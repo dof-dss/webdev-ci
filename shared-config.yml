@@ -1,33 +1,58 @@
 version: 2.1
 
-parameters:
-  php_version:
-    type: string
-    default: "8.3"
-    description: "PHP version to use"
-  
-  node_version:
-    type: string
-    default: "18"
-    description: "Node.js version to use"
+# YAML ANCHORS: re-usable snippets of YAML.
+default_docker_image: &docker_image
+  docker:
+    - image: thecodingmachine/php:8.3-v4-fpm
+      environment:
+        PLATFORM_REGION: "uk-1.platform.sh"
+        PROJECT_ROOT: "/home/docker/project"
+        PHP_EXTENSION_GD: 1
+        PHP_INI_MEMORY_LIMIT: 1g        
 
-executors:
-  php-executor:
-    docker:
-      - image: cimg/php:<< parameters.php_version >>
-    working_directory: ~/project
+# Jobs; tied in to workflows (end of file).
+jobs:
+  # Tests the integrity of the build, stores the results in a workspace for re-use in later jobs.
+  build:
+    <<: *docker_image
+    steps:
+      - checkout_code
+      - composer_tasks
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - ./
 
+# Re-usable commands.
 commands:
-  setup-php:
+  checkout_code:
+    description: "Handle composer access tokens, SSH key fingerprints and code checkout"
     steps:
+      # Add SSH user key so we can access related repositories as part of our initial clone + composer install command.
+      # 65:4e >> GitHub user key fingerprint.
+      - add_ssh_keys:
+          fingerprints:
+            - "65:4e:c7:ca:9f:c0:40:f7:16:2c:da:33:63:1d:90:12"
       - checkout
+  composer_tasks:
+    description: "Validate and install dependencies using composer"
+    steps:
       - run:
-          name: Install dependencies
-          command: composer install -n --prefer-dist
+          name: Validate composer.json and composer.lock file for consistency
+          command: composer validate --no-check-all --strict
+      - restore_cache:
+          keys:
+            - composer-{{ checksum "composer.lock" }}
+      - run:
+          name: Fetch dependencies with composer
+          command: composer install --no-interaction --optimize-autoloader
+      - save_cache:
+          key: composer-{{ checksum "composer.lock" }}
+          paths:
+            - $HOME/.composer/cache
 
-  setup-node:
-    steps:
-      - checkout
-      - run:
-          name: Install Node dependencies
-          command: npm ci
+# Workflow definitions.
+workflows:
+  build-test:
+    jobs:
+      - build
