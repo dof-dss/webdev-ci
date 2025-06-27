@@ -1,5 +1,14 @@
 version: 2.1
 
+# PARAMETERS: injected into pipelines and continuation orb will stitch together at runtime.
+parameters:
+  php_version:
+    type: string
+    default: "8.3"
+  drupal_core_version:
+    type: string
+    default: "10.4"
+
 # YAML ANCHORS: re-usable snippets of YAML.
 default_docker_image: &docker_image
   docker:
@@ -22,6 +31,33 @@ jobs:
           root: ./
           paths:
             - ./
+  # Test for coding standards - will inherit the workspace/filesystem changes from build step, above.
+  coding_standards:
+    <<: *docker_image
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: PHPCS analysis
+          command: |
+            CHECK_DIRS="${PROJECT_ROOT}/web/modules/custom"
+            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/modules/origins"
+            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/themes/custom"
+            ~/project/phpcs.sh ${PROJECT_ROOT} $CHECK_DIRS
+
+  deprecated_code:
+    <<: *docker_image
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Deprecated code check
+          command: |
+            cd $PROJECT_ROOT
+            CHECK_DIRS="${PROJECT_ROOT}/web/modules/custom"
+            CHECK_DIRS="$CHECK_DIRS ${PROJECT_ROOT}/web/modules/origins"
+            CHECK_DIRS="$CHECK_DIRS ${PROJECT_ROOT}/web/themes/custom"
+            vendor/bin/drupal-check $CHECK_DIRS
 
 # Re-usable commands.
 commands:
@@ -56,3 +92,9 @@ workflows:
   build-test:
     jobs:
       - build
+      - coding_standards:
+          requires:
+            - build
+      - deprecated_code:
+          requires:
+            - build
