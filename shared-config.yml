@@ -8,11 +8,20 @@ parameters:
   drupal_core_version:
     type: string
     default: "10.4"
+  coding_standards_dirs:
+    type: string
+    default: ""
+  deprecated_code_dirs:
+    type: string
+    default: ""
+  ssh_fingerprint:
+    type: string 
+    default: ""
 
 # YAML ANCHORS: re-usable snippets of YAML.
 default_docker_image: &docker_image
   docker:
-    - image: thecodingmachine/php:8.3-v4-fpm
+    - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
       environment:
         PLATFORM_REGION: "uk-1.platform.sh"
         PROJECT_ROOT: "/home/docker/project"
@@ -39,11 +48,7 @@ jobs:
           at: ./
       - run:
           name: PHPCS analysis
-          command: |
-            CHECK_DIRS="${PROJECT_ROOT}/web/modules/custom"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/modules/origins"
-            CHECK_DIRS="${CHECK_DIRS} ${PROJECT_ROOT}/web/themes/custom"
-            ~/project/phpcs.sh ${PROJECT_ROOT} $CHECK_DIRS
+          command: ${PROJECT_ROOT}/phpcs.sh ${PROJECT_ROOT} << parameters.coding_standards_dirs >>
 
   deprecated_code:
     <<: *docker_image
@@ -52,12 +57,7 @@ jobs:
           at: ./
       - run:
           name: Deprecated code check
-          command: |
-            cd $PROJECT_ROOT
-            CHECK_DIRS="${PROJECT_ROOT}/web/modules/custom"
-            CHECK_DIRS="$CHECK_DIRS ${PROJECT_ROOT}/web/modules/origins"
-            CHECK_DIRS="$CHECK_DIRS ${PROJECT_ROOT}/web/themes/custom"
-            vendor/bin/drupal-check $CHECK_DIRS
+          command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
 
 # Re-usable commands.
 commands:
@@ -68,7 +68,7 @@ commands:
       # 65:4e >> GitHub user key fingerprint.
       - add_ssh_keys:
           fingerprints:
-            - "65:4e:c7:ca:9f:c0:40:f7:16:2c:da:33:63:1d:90:12"
+            - << parameters.ssh_fingerprint >>
       - checkout
   composer_tasks:
     description: "Validate and install dependencies using composer"
