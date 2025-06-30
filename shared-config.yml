@@ -32,9 +32,15 @@ default_docker_image: &docker_image
 jobs:
   # Tests the integrity of the build, stores the results in a workspace for re-use in later jobs.
   build:
-    <<: *docker_image
+    parameters:
+      php_version:
+        type: string
+      ssh_fingerprint:
+        type: string
+    <<: *default_docker_image
     steps:
-      - checkout_code
+      - checkout_code:
+          ssh_fingerprint: << parameters.ssh_fingerprint >>
       - composer_tasks
       - persist_to_workspace:
           root: ./
@@ -42,7 +48,12 @@ jobs:
             - ./
   # Test for coding standards - will inherit the workspace/filesystem changes from build step, above.
   coding_standards:
-    <<: *docker_image
+    parameters:
+      php_version:
+        type: string
+      coding_standards_dirs:
+        type: string
+    <<: *default_docker_image
     steps:
       - attach_workspace:
           at: ./
@@ -51,7 +62,12 @@ jobs:
           command: ${PROJECT_ROOT}/phpcs.sh ${PROJECT_ROOT} << parameters.coding_standards_dirs >>
 
   deprecated_code:
-    <<: *docker_image
+    parameters:
+      php_version:
+        type: string
+      deprecated_code_dirs:
+        type: string
+    <<: *default_docker_image
     steps:
       - attach_workspace:
           at: ./
@@ -100,10 +116,16 @@ commands:
 workflows:
   build-test:
     jobs:
-      - build
+      - build:
+          php_version: << pipeline.parameters.php_version >>
+          ssh_fingerprint: << pipeline.parameters.ssh_fingerprint >>
       - coding_standards:
           requires:
             - build
+          php_version: << pipeline.parameters.php_version >>
+          coding_standards_dirs: << pipeline.parameters.coding_standards_dirs >>
       - deprecated_code:
           requires:
             - build
+          php_version: << pipeline.parameters.php_version >>
+          deprecated_code_dirs: << pipeline.parameters.deprecated_code_dirs >>
