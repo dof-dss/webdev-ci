@@ -104,13 +104,9 @@ commands:
           keys:
             - composer-vendor-{{ checksum "composer.lock" }}
       - run:
-          name: Install dependencies (if vendor/ missing)
+          name: Install dependencies
           command: |
-            if [ ! -d vendor ]; then
-              composer install --no-interaction --optimize-autoloader
-            else
-              echo "Vendor directory exists, skipping install."
-            fi
+            composer install --no-interaction --optimize-autoloader
       - save_cache:
           key: composer-vendor-{{ checksum "composer.lock" }}
           paths:
