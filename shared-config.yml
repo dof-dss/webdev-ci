@@ -18,26 +18,20 @@ parameters:
     type: string 
     default: ""
 
-# YAML ANCHORS: re-usable snippets of YAML.
-default_docker_image: &docker_image
-  docker:
-    - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
-      environment:
-        PLATFORM_REGION: "uk-1.platform.sh"
-        PROJECT_ROOT: "/home/docker/project"
-        PHP_EXTENSION_GD: 1
-        PHP_INI_MEMORY_LIMIT: 1g        
-
-# Jobs; tied in to workflows (end of file).
 jobs:
-  # Tests the integrity of the build, stores the results in a workspace for re-use in later jobs.
   build:
     parameters:
       php_version:
         type: string
       ssh_fingerprint:
         type: string
-    <<: *default_docker_image
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - checkout_code:
           ssh_fingerprint: << parameters.ssh_fingerprint >>
@@ -46,14 +40,20 @@ jobs:
           root: ./
           paths:
             - ./
-  # Test for coding standards - will inherit the workspace/filesystem changes from build step, above.
+
   coding_standards:
     parameters:
       php_version:
         type: string
       coding_standards_dirs:
         type: string
-    <<: *default_docker_image
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - attach_workspace:
           at: ./
@@ -67,7 +67,13 @@ jobs:
         type: string
       deprecated_code_dirs:
         type: string
-    <<: *default_docker_image
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - attach_workspace:
           at: ./
@@ -75,28 +81,28 @@ jobs:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
 
-# Re-usable commands.
 commands:
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
+    parameters:
+      ssh_fingerprint:
+        type: string
+        default: ""
     steps:
-      # Add SSH user key so we can access related repositories as part of our initial clone + composer install command.
-      # 65:4e >> GitHub user key fingerprint.
       - add_ssh_keys:
           fingerprints:
             - << parameters.ssh_fingerprint >>
       - checkout
+
   composer_tasks:
     description: "Validate and install dependencies using composer"
     steps:
       - run:
           name: Validate composer.json and composer.lock file for consistency
           command: composer validate --no-check-all --strict
-
       - restore_cache:
           keys:
             - composer-vendor-{{ checksum "composer.lock" }}
-
       - run:
           name: Install dependencies (if vendor/ missing)
           command: |
@@ -105,14 +111,12 @@ commands:
             else
               echo "Vendor directory exists, skipping install."
             fi
-
       - save_cache:
           key: composer-vendor-{{ checksum "composer.lock" }}
           paths:
             - vendor
             - ~/.composer/cache
 
-# Workflow definitions.
 workflows:
   build-test:
     jobs:
