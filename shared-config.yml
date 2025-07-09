@@ -198,3 +198,14 @@ workflows:
             - build
           php_version: << pipeline.parameters.php_version >>
           deprecated_code_dirs: << pipeline.parameters.deprecated_code_dirs >>
+  build-edge:
+    triggers:
+      - schedule:
+          # At 04:00 every Mon-Fri
+          cron: "0 4 * * 1-5"
+          filters:
+            branches:
+              only:
+                - development
+    jobs:
+      - build_edge
