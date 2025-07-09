@@ -162,25 +162,25 @@ commands:
           name: Switch dof-dss packages to HEAD on dev branches
           command: composer require << pipeline.parameters.edge_build_dofdss_packages >>
     
-    install_psh_cli:
-      description: "Install the Platform.sh CLI tool"
-      steps:
-        - run:
-            name: Install the Platform.sh CLI tool
-            command: curl -sS https://platform.sh/cli/installer | php
-        - run:
-            name: Add platform cli tool to $PATH
-            command: echo 'export PATH="$HOME/"'.platformsh/bin':"$PATH"' >> $BASH_ENV
+  install_psh_cli:
+    description: "Install the Platform.sh CLI tool"
+    steps:
+      - run:
+          name: Install the Platform.sh CLI tool
+          command: curl -sS https://platform.sh/cli/installer | php
+      - run:
+          name: Add platform cli tool to $PATH
+          command: echo 'export PATH="$HOME/"'.platformsh/bin':"$PATH"' >> $BASH_ENV
 
-    hosts_keyscan:
-      description: "Keyscan for hosts that require SSH access"
-      steps:
-        - run:
-            name: Keyscan for hosts that require SSH access
-            command: |
-              mkdir -p ~/.ssh
-              ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-              ssh-keyscan -H ssh.$PLATFORM_REGION >> ~/.ssh/known_hosts
+  hosts_keyscan:
+    description: "Keyscan for hosts that require SSH access"
+    steps:
+      - run:
+          name: Keyscan for hosts that require SSH access
+          command: |
+            mkdir -p ~/.ssh
+            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+            ssh-keyscan -H ssh.$PLATFORM_REGION >> ~/.ssh/known_hosts
 
 workflows:
   build-test:
