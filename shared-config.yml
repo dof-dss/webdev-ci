@@ -20,6 +20,9 @@ parameters:
   edge_build_dofdss_packages:
     type: string
     default: ""
+  edge_schedule:
+    type: string
+    default: ""
   ssh_fingerprint:
     type: string 
     default: ""
@@ -204,13 +207,7 @@ workflows:
           deprecated_code_dirs: << pipeline.parameters.deprecated_code_dirs >>
   build-edge:
     triggers:
-      - schedule:
-          # At 04:00 every Mon-Fri
-          cron: "0 4 * * 1-5"
-          filters:
-            branches:
-              only:
-                - development
+      - schedule: << pipeline.parameters.edge_schedule >>
     jobs:
       - build_edge:
           php_version: << pipeline.parameters.php_version >>
