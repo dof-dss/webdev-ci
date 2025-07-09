@@ -50,7 +50,11 @@ jobs:
   # Task to build the edge site.
   build_edge:
     parameters:
+      edge_branch:
+        type: string
       edge_build_dofdss_packages:
+        type: string
+      php_version:
         type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
@@ -208,4 +212,7 @@ workflows:
               only:
                 - development
     jobs:
-      - build_edge
+      - build_edge:
+        php_version: << pipeline.parameters.php_version >>
+        edge_branch: << pipeline.parameters.edge_branch >>
+        edge_build_dofdss_packages: << pipeline.parameters.edge_build_dofdss_packages >>
