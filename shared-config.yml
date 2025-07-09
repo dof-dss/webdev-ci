@@ -14,6 +14,9 @@ parameters:
   deprecated_code_dirs:
     type: string
     default: ""
+  edge_branch:
+    type: string
+    default: ""
   edge_build_dofdss_packages:
     type: string
     default: ""
@@ -43,6 +46,42 @@ jobs:
           root: ./
           paths:
             - ./
+
+  # Task to build the edge site.
+  build_edge:
+    parameters:
+      edge_build_dofdss_packages:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          # git variables to avoid empty committer identity errors
+          EMAIL: "circleci@localhost"
+          GIT_COMMITTER_NAME: "Circle CI"
+          GIT_AUTHOR_NAME: "Circle CI"
+          EDGE_BUILD_BRANCH: << pipeline.parameters.edge_branch >>
+    steps:
+      - hosts_keyscan
+      - checkout_code
+      - install_psh_cli
+      - run:
+          name: Switch to edge branch
+          # -b flag is important; this checkout won't have a local branch of that name
+          # (although origin/$EDGE_BUILD_BRANCH does exist) so this always works and
+          # lets us push -f to include everything at th end. If we use a plain checkout
+          # command we miss any recent config commits and only end up bumping the
+          # composer package versions after this step.
+          command: git checkout -b $EDGE_BUILD_BRANCH
+      - composer_tasks__edge_packages
+      - run:
+          name: Re-point dof-dss packages to use latest development code and push.
+          command: |
+            git add composer.*
+            git commit -m "Set dof-dss packages to HEAD development for build"
+      - run:
+          name: Push changes back to GitHub
+          command: |
+            git push -f origin $EDGE_BUILD_BRANCH
 
   coding_standards:
     parameters:
