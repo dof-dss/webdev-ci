@@ -7,6 +7,9 @@ parameters:
   drupal_core_version:
     type: string
     default: "10.4"
+  custom_code_dirs:
+    type: string
+    default: "${PROJECT_ROOT}/web/modules/custom"
   coding_standards_dirs:
     type: string
     default: ""
