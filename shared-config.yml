@@ -83,8 +83,6 @@ jobs:
     parameters:
       edge_branch:
         type: string
-      edge_build_dofdss_packages:
-        type: string
       php_version:
         type: string
     docker:
