@@ -1,6 +1,5 @@
 version: 2.1
 
-# PARAMETERS: injected into pipelines and continuation orb will stitch together at runtime.
 parameters:
   php_version:
     type: string
@@ -18,9 +17,6 @@ parameters:
     type: string
     default: ""
   edge_build_dofdss_packages:
-    type: string
-    default: ""
-  edge_schedule:
     type: string
     default: ""
   ssh_fingerprint:
@@ -50,7 +46,6 @@ jobs:
           paths:
             - ./
 
-  # Task to build the edge site.
   build_edge:
     parameters:
       edge_branch:
@@ -62,7 +57,6 @@ jobs:
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
         environment:
-          # git variables to avoid empty committer identity errors
           EMAIL: "circleci@localhost"
           GIT_COMMITTER_NAME: "Circle CI"
           GIT_AUTHOR_NAME: "Circle CI"
@@ -73,11 +67,6 @@ jobs:
       - install_psh_cli
       - run:
           name: Switch to edge branch
-          # -b flag is important; this checkout won't have a local branch of that name
-          # (although origin/$EDGE_BUILD_BRANCH does exist) so this always works and
-          # lets us push -f to include everything at th end. If we use a plain checkout
-          # command we miss any recent config commits and only end up bumping the
-          # composer package versions after this step.
           command: git checkout -b $EDGE_BUILD_BRANCH
       - composer_tasks__edge_packages
       - run:
@@ -188,28 +177,3 @@ commands:
             mkdir -p ~/.ssh
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts
             ssh-keyscan -H ssh.$PLATFORM_REGION >> ~/.ssh/known_hosts
-
-workflows:
-  build-test:
-    jobs:
-      - build:
-          php_version: << pipeline.parameters.php_version >>
-          ssh_fingerprint: << pipeline.parameters.ssh_fingerprint >>
-      - coding_standards:
-          requires:
-            - build
-          php_version: << pipeline.parameters.php_version >>
-          coding_standards_dirs: << pipeline.parameters.coding_standards_dirs >>
-      - deprecated_code:
-          requires:
-            - build
-          php_version: << pipeline.parameters.php_version >>
-          deprecated_code_dirs: << pipeline.parameters.deprecated_code_dirs >>
-  build-edge:
-    triggers:
-      - schedule: << pipeline.parameters.edge_schedule >>
-    jobs:
-      - build_edge:
-          php_version: << pipeline.parameters.php_version >>
-          edge_branch: << pipeline.parameters.edge_branch >>
-          edge_build_dofdss_packages: << pipeline.parameters.edge_build_dofdss_packages >>
