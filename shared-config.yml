@@ -79,6 +79,33 @@ jobs:
           command: |
             git push -f origin $EDGE_BUILD_BRANCH
 
+  sync_data:
+    parameters:
+      edge_branch:
+        type: string
+      edge_build_dofdss_packages:
+        type: string
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          EMAIL: "circleci@localhost"
+          GIT_COMMITTER_NAME: "Circle CI"
+          GIT_AUTHOR_NAME: "Circle CI"
+          EDGE_BUILD_BRANCH: << pipeline.parameters.edge_branch >>
+          PLATFORM_SOLR_HOST: "solr.internal:8080"
+    steps:
+      - hosts_keyscan
+      - checkout_code
+      - install_psh_cli
+      - run:
+          # This task triggers a drush cim from the .platform.app.yaml build/deploy steps.
+          # $PLATFORM_PROJECT injected from Cirlce CI env variables and not declared here.
+          name: Trigger a data sync from production environment to an edge build.
+          command: |
+            platform sync data -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH -y
+
   coding_standards:
     parameters:
       php_version:
