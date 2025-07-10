@@ -9,7 +9,7 @@ parameters:
     default: "10.4"
   custom_code_dirs:
     type: string
-    default: "${PROJECT_ROOT}/web/modules/custom"
+    default: ""
   coding_standards_dirs:
     type: string
     default: ""
@@ -48,7 +48,6 @@ jobs:
           root: ./
           paths:
             - ./
-
   build_edge:
     parameters:
       edge_branch:
@@ -126,7 +125,6 @@ jobs:
       - run:
           name: PHPCS analysis
           command: ${PROJECT_ROOT}/phpcs.sh ${PROJECT_ROOT} << parameters.coding_standards_dirs >>
-
   deprecated_code:
     parameters:
       php_version:
@@ -146,7 +144,6 @@ jobs:
       - run:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
-
   disallowed_functions:
     parameters:
       php_version:
