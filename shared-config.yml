@@ -144,6 +144,23 @@ jobs:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
 
+  disallowed_functions:
+    parameters:
+      php_version:
+        type: string
+      custom_code_dirs:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PROJECT_ROOT: "/home/docker/project"
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Check for disallowed function calls
+          command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
+
 commands:
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
