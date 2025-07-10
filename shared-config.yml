@@ -154,6 +154,7 @@ jobs:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
         environment:
           PROJECT_ROOT: "/home/docker/project"
+          PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - attach_workspace:
           at: ./
