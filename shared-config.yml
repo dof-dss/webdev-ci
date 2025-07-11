@@ -221,6 +221,10 @@ jobs:
         type: string
       node_version:
         type: string
+      edge_branch:
+        type: string
+      edge_build_dofdss_packages:
+        type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
         environment:
