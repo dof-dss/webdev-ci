@@ -22,6 +22,9 @@ parameters:
   edge_build_dofdss_packages:
     type: string
     default: ""
+  node_version:
+    type: string
+    default: ""
   ssh_fingerprint:
     type: string 
     default: ""
@@ -161,6 +164,114 @@ jobs:
       - run:
           name: Check for disallowed function calls
           command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
+  # UNITY check for differences in upstream Drupal profile.
+  check_illegal_updates:
+    parameters:
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    steps:
+      - attach_workspace:
+          at: ./
+      - hosts_keyscan
+      - run:
+          name: Check for updates made directly in this repo rather than in maestro-drupal-unity
+          command: |
+            git clone git@github.com:dof-dss/maestro-drupal-unity.git
+            echo "** Any failures in this section indicate that updates have been made directly in this repo "
+            echo "when they should have been made in https://github.com/dof-dss/maestro-drupal-unity and"
+            echo "pulled from the upstream repo using 'maestro pub' **"
+            echo "** checking composer.json  **"
+            diff maestro-drupal-unity/composer.json composer.json
+            echo "** checking composer.lock  **"
+            diff maestro-drupal-unity/composer.lock composer.lock
+            echo "** checking circleci/config.yml  **"
+            #diff maestro-drupal-unity/.circleci/config.yml .circleci/config.yml
+            echo "** checking platform.app.yaml **"
+            grep 'will be overwritten' .platform.app.yaml
+            echo "** checking site.settings.php  **"
+            diff maestro-drupal-unity/web/sites/site.settings.php web/sites/site.settings.php
+            echo "** checking sites.php  **"
+            diff maestro-drupal-unity/web/sites/sites.php web/sites/sites.php
+  # Checks to ensure that Unity Base has not been polluted with project files.
+  unity_base_checks:
+    parameters:
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    steps:
+      - attach_workspace:
+          at: ./
+      - when:
+          condition:
+            equal: [ "https://github.com/dof-dss/unity_base", << pipeline.project.git_url >> ]
+          steps:
+            - run:
+                name: Check Project directory and files do not exist
+                command: |
+                  cd $PROJECT_ROOT
+                  .circleci/unity_base_guardian.sh
+
+  # UNITY Nightly edge build
+  unity_edge_build:
+    parameters:
+      php_version:
+        type: string
+      node_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_EXTENSIONS: "gd"
+          PHP_INI_MEMORY_LIMIT: -1
+          PHP_INI_MAX_EXECUTION_TIME: 600
+          PHP_INI_MAX_INPUT_TIME: 600
+          # git variables to avoid empty committer identity errors
+          EMAIL: "circleci@localhost"
+          GIT_COMMITTER_NAME: "Circle CI"
+          GIT_AUTHOR_NAME: "Circle CI"
+          EDGE_BUILD_BRANCH: << pipeline.parameters.edge_branch >>
+          CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
+          NODE_VERSION: << pipeline.parameters.node_version >>
+    steps:
+      - hosts_keyscan
+      - checkout_code
+      - run:
+          name: Add OS and PHP extensions
+          command: |
+            touch ~/.bashrc
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+            sudo apt update --allow-releaseinfo-change
+            sudo apt install libjpeg-dev make python3 g++ dh-autoreconf -y
+      - install_psh_cli
+      - run:
+          name: Switch to edge branch
+          command: git checkout -b $EDGE_BUILD_BRANCH
+      - composer_tasks__edge_packages
+      - run:
+          name: Push composer package updates back to GitHub
+          command: |
+            git add composer.*
+            git commit -m "Set dof-dss packages to HEAD development for build"
+      - run:
+          name: Rebuild site themes
+          command: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+            [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+            cd $PROJECT_ROOT
+            ./build-themes.sh --sites-dir $PROJECT_ROOT/project/sites
+            # Push to fixed, non-integrating build branch. GitHub webhook integration will propagate this
+            # to platform.sh for later steps to use.
+            cd $PROJECT_ROOT
+            git add *.css
+            git commit -m "Theme rebuild"
+            git push -f origin $EDGE_BUILD_BRANCH
 
 commands:
   checkout_code:
