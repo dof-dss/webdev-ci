@@ -239,9 +239,9 @@ jobs:
           EMAIL: "circleci@localhost"
           GIT_COMMITTER_NAME: "Circle CI"
           GIT_AUTHOR_NAME: "Circle CI"
-          EDGE_BUILD_BRANCH: << pipeline.parameters.edge_branch >>
+          EDGE_BUILD_BRANCH: << parameters.edge_branch >>
           CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
-          NODE_VERSION: << pipeline.parameters.node_version >>
+          NODE_VERSION: << parameters.node_version >>
     steps:
       - hosts_keyscan
       - checkout_code
