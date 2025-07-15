@@ -397,7 +397,6 @@ jobs:
           PHP_INI_MAX_INPUT_TIME: 600
           EDGE_BUILD_BRANCH: << parameters.edge_branch >>
     steps:
-      - hosts_keyscan
       - checkout_code
       - install_psh_cli
       - run:
