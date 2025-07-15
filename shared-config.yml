@@ -276,6 +276,93 @@ jobs:
             git add *.css
             git commit -m "Theme rebuild"
             git push -f origin $EDGE_BUILD_BRANCH
+  # Separate task to allow us to sync data on PSH environments, without pauses in other jobs.
+  unity_sync_data:
+    parameters:
+      php_version:
+        type: string
+      edge_branch:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_EXTENSIONS: "gd"
+          PHP_INI_MEMORY_LIMIT: -1
+          PHP_INI_MAX_EXECUTION_TIME: 600
+          PHP_INI_MAX_INPUT_TIME: 600
+          EDGE_BUILD_BRANCH: << parameters.edge_branch >>
+    steps:
+      steps:
+        - hosts_keyscan
+        - checkout_code
+        - install_psh_cli
+        - run:
+            name: Trigger a data sync from master environment to nightly edge build.
+            command: |
+              platform sync data -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH -y
+            no_output_timeout: 20m
+        - run:
+            name: Backup data sync if the previous attempt failed.
+            command: |
+              # Pause for the blocking activity to finish.
+              sleep 300s
+              platform sync data -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH -y
+            when: on_fail
+            no_output_timeout: 30m
+        - run:
+            name: Run any outstanding updates
+            command: |
+              for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
+              do
+                result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
+                if [[ -n $result ]]; then
+                  result2=$(platform drush "updb -l ${site} -y" -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Fastly (fastly)" || true) )
+              fi
+              done
+            no_output_timeout: 20m
+        - run:
+            name: Turn off fastly module to allow for cleaner config import
+            command: |
+              for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
+              do
+                result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
+                if [[ -n $result ]]; then
+                  result2=$(platform drush "pml --status=enabled -l ${site}" -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Fastly (fastly)" || true) )
+                  if [[ -n $result2 ]]; then
+                    echo "***** Uninstall Fastly - ${site} *****"
+                    platform drush "pmu fastly -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+                  fi
+              fi
+              done
+        - run:
+            name: Clear cache before config import
+            command: |
+              for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
+              do
+                result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
+                if [[ -n $result ]]; then
+                  echo "***** Clear Cache - ${site} *****"
+                  platform drush "cr -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+                fi
+              done
+        - run:
+            name: Refresh configuration as our db will contain active prod config after sync operation
+            command: |
+              for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
+              do
+                result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
+                if [[ -n $result ]]; then
+                  echo "***** Config Import - ${site} *****"
+                  platform drush "cim -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+                  echo "***** Import blocks/taxonomies/menus - ${site} *****"
+                  platform drush "import-all-if-installed safe -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+                  echo "***** Enable QA accounts - ${site} *****"
+                  platform drush "bulk_update_qa_accounts enable -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+                fi
+              done
 
 commands:
   checkout_code:
