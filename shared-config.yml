@@ -465,6 +465,59 @@ jobs:
               fi
             done
 
+  # THEMING repo jobs.
+  theme_install:
+    parameters:
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
+    steps:
+      - checkout
+      - restore_cache:
+          key: node_modules-{{ .Branch }}-{{ checksum "package.json" }}
+      - run:
+          name: Fetch dependencies
+          command: npm install
+      - save_cache:
+          key: node_modules-{{ .Branch }}-{{ checksum "package.json" }}
+          paths:
+            - node_modules
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - ./
+  theme_lint:
+    parameters:
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Lint all frontend code
+          command: |
+            npm run lint
+  theme_build_assets:
+    parameters:
+      php_version:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Fetch dependencies
+          command: npm run build
 commands:
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
