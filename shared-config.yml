@@ -252,23 +252,21 @@ jobs:
           PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - checkout
-      - run: ls -lha ~/
-      - run: ls -lha ~/project/
       - run: mv ~/project /home/docker/dofdss
-      - run: ls -lha ~/dofdss/
-#      - run:
-#          name: Fetch latest Drupal core and other misc composer tools.
-#          command: |
-#            cd $PROJECT_ROOT
-#            composer create-project drupal/recommended-project:<< parameters.drupal_core_version >>.x-dev $PROJECT_ROOT --no-interaction
-#            composer require --dev phpstan/extension-installer spaze/phpstan-disallowed-calls
-#      - run:
-#          name: Move custom code into position
-#          command: mv /home/docker/dofdss << parameters.custom_code_dirs >>
-#      - run:
-#          name: Check for disallowed function calls
-#          command: |
-#            vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c /home/docker/dofdss/.circleci/phpstan.neon
+      - run: rm -rf ~/project
+      - run:
+          name: Fetch latest Drupal core and other misc composer tools.
+          command: |
+            cd $PROJECT_ROOT
+            composer create-project drupal/recommended-project:<< parameters.drupal_core_version >>.x-dev $PROJECT_ROOT --no-interaction
+            composer require --dev phpstan/extension-installer spaze/phpstan-disallowed-calls
+      - run:
+          name: Move custom code into position
+          command: mv /home/docker/dofdss << parameters.custom_code_dirs >>
+      - run:
+          name: Check for disallowed function calls
+          command: |
+            vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c /home/docker/dofdss/.circleci/phpstan.neon
   # UNITY check for differences in upstream Drupal profile.
   check_illegal_updates:
     parameters:
