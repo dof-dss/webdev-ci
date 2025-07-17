@@ -473,7 +473,7 @@ jobs:
       node_version:
         type: string
     docker:
-      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node-<< parameters.node_version >>
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node<< parameters.node_version >>
         environment:
           CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
     steps:
@@ -498,7 +498,7 @@ jobs:
       node_version:
         type: string
     docker:
-      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node-<< parameters.node_version >>
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node<< parameters.node_version >>
         environment:
           CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
     steps:
@@ -515,7 +515,7 @@ jobs:
       node_version:
         type: string
     docker:
-      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node-<< parameters.node_version >>
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm-node<< parameters.node_version >>
         environment:
           CPPFLAGS: "-DPNG_ARM_NEON_OPT=0"
     steps:
