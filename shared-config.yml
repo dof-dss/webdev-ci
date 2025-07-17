@@ -252,7 +252,7 @@ jobs:
           PHP_INI_MEMORY_LIMIT: 1g
     steps:
       - checkout:
-          path: ./dofdss
+          path: /home/docker/dofdss
       - run:
           name: Fetch latest Drupal core and other misc composer tools.
           command: |
@@ -261,11 +261,11 @@ jobs:
             composer require --dev phpstan/extension-installer spaze/phpstan-disallowed-calls
       - run:
           name: Move custom code into position
-          command: mv $PROJECT_ROOT/dofdss << parameters.custom_code_dirs >>
+          command: mv /home/docker/dofdss << parameters.custom_code_dirs >>
       - run:
           name: Check for disallowed function calls
           command: |
-            vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c $PROJECT_ROOT/dofdss/.circleci/phpstan.neon
+            vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c /home/docker/dofdss/.circleci/phpstan.neon
   # UNITY check for differences in upstream Drupal profile.
   check_illegal_updates:
     parameters:
