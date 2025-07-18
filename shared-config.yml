@@ -187,8 +187,13 @@ jobs:
           command: |
             composer require drupal/coder --prefer-stable --no-interaction --optimize-autoloader
             # Move vendor and core directories up a level, out of the way, as we don't want to code-check all of that.
-            mv vendor ../
-            mv core ../
+            if [ -d vendor ]; then
+              mv vendor ../
+            fi
+
+            if [ -d core ]; then
+              mv core ../
+            fi
       - run:
           name: Fetch phpcs convenience script
           command: |
