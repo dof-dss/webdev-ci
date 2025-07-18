@@ -22,6 +22,9 @@ parameters:
   edge_build_dofdss_packages:
     type: string
     default: ""
+  ignore_dirs:
+    type: string
+    default: ""
   node_version:
     type: string
     default: ""
@@ -118,6 +121,8 @@ jobs:
         type: string
       coding_standards_dirs:
         type: string
+      ignore_dirs:
+        type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
         environment:
@@ -130,7 +135,7 @@ jobs:
           at: ./
       - run:
           name: PHPCS analysis
-          command: ${PROJECT_ROOT}/phpcs.sh ${PROJECT_ROOT} << parameters.coding_standards_dirs >>
+          command: ${PROJECT_ROOT}/phpcs.sh "${PROJECT_ROOT}" "<< parameters.coding_standards_dirs >>" "<< parameters.ignore_dirs >>"
   deprecated_code:
     parameters:
       php_version:
