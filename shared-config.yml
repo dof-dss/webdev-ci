@@ -527,7 +527,7 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
-          name: Fetch dependencies
+          name: Build theme assets
           command: npm run build
 commands:
   checkout_code:
