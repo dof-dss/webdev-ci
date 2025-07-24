@@ -72,6 +72,7 @@ jobs:
           GIT_COMMITTER_NAME: "Circle CI"
           GIT_AUTHOR_NAME: "Circle CI"
           EDGE_BUILD_BRANCH: << pipeline.parameters.edge_branch >>
+          PHP_EXTENSION_GD: 1
     steps:
       - hosts_keyscan
       - checkout_code
