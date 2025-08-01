@@ -12,7 +12,7 @@ jobs:
           command: pip install --quiet yamllint
       - run:
           name: Lint shared-config.yml
-          command: yamllint -c .yamllint shared-config.yml
+          command: yamllint -c .yamllint.yml shared-config.yml
       # 2. Compose minimal config and validate with CircleCI CLI
       - run:
           name: Compose & validate CircleCI config
