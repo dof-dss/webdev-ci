@@ -1,0 +1,7 @@
+# .yamllint.yml
+extends: default
+
+rules:
+  # completely disable the line-length rule
+  line-length:
+    level: disable
