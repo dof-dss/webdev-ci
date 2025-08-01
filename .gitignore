@@ -1,0 +1,63 @@
+# IDE and editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+.project
+.settings/
+.classpath
+*.swp
+*~
+.DS_Store
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# PHP files
+/vendor/
+composer.phar
+/auth.json
+.phpunit.result.cache
+.php_cs.cache
+.php-cs-fixer.cache
+.phpcs-cache
+
+# Node.js files
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.npm/
+.yarn/
+.pnp.*
+.cache/
+.eslintcache
+
+# Temporary and log files
+*.log
+*.sql
+*.sqlite
+*.tmp
+*.bak
+*.swp
+*.swo
+.sass-cache/
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+/dist/
+/build/
+/public/
+
+# CircleCI local files
+.circleci-cli/
+process.yml
