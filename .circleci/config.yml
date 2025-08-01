@@ -18,24 +18,22 @@ jobs:
           name: Compose & validate CircleCI config
           command: |
             # Install CircleCI CLI
-            curl -fLSs https://circle.ci/cli | bash
+            curl -fLSs https://circle.ci/cli | sudo bash
             echo 'export PATH="$HOME/.circleci/bin:$PATH"' >> $BASH_ENV
             source $BASH_ENV
 
-            # Start our temp config with the version line
-            echo 'version: 2.1' > temp_config.yml
+            # Munge together shared-config contents with stub workflow
+            cat shared-config.yml > temp_config.yml
 
-            # Append the shared-config contents
-            cat shared-config.yml >> temp_config.yml
-
-            # Append stub workflow to mock per-repo workflows.
+            # Append a stub workflow that calls `build` with required args
             echo 'workflows:' >> temp_config.yml
             echo '  validate:' >> temp_config.yml
             echo '    jobs:' >> temp_config.yml
-            echo "      - $JOB_NAME" >> temp_config.yml
+            # Use your known defaults for the parameters:
+            echo '      - build: {php_version: "8.3", ssh_fingerprint: ""}' >> temp_config.yml
 
             # Validate the composed config
-            ~/.circleci/bin/circleci config validate -c temp_config.yml
+            circleci config validate -c temp_config.yml
 
 workflows:
   build-test:

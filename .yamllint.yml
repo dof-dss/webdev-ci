@@ -2,6 +2,11 @@
 extends: default
 
 rules:
-  # completely disable the line-length rule
+  # disable the "missing document start '---'" warning entirely
+  document-start: disable
+
   line-length:
-    level: disable
+    # allow lines up to 200 characters
+    max: 200
+    # only warn (won't produce a non-zero exit code)
+    level: warning

@@ -29,7 +29,7 @@ parameters:
     type: string
     default: ""
   ssh_fingerprint:
-    type: string 
+    type: string
     default: ""
   supporting_repo_dependent_packages:
     type: string
@@ -332,7 +332,7 @@ jobs:
           at: ./
       - when:
           condition:
-            equal: [ "https://github.com/dof-dss/unity_base", << pipeline.project.git_url >> ]
+            equal: ["https://github.com/dof-dss/unity_base", << pipeline.project.git_url >>]
           steps:
             - run:
                 name: Check Project directory and files do not exist
@@ -585,7 +585,7 @@ commands:
       - run:
           name: Switch dof-dss packages to HEAD on dev branches
           command: composer require << pipeline.parameters.edge_build_dofdss_packages >>
-    
+
   install_psh_cli:
     description: "Install the Platform.sh CLI tool"
     steps:
