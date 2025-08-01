@@ -1,0 +1,19 @@
+version: 2.1
+
+orbs:
+  # Import the yamllint orb
+  yamllint: orbss/yamllint@0.1.2
+
+jobs:
+  validate-config:
+    # Use the default executor provided by the orb, which has yamllint installed.
+    executor: yamllint/default
+    steps:
+      - checkout
+      - yamllint/lint:
+          files: shared-config.yml
+
+workflows:
+  validate:
+    jobs:
+      - validate-config
