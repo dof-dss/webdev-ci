@@ -79,7 +79,7 @@ jobs:
       - install_psh_cli
       - run:
           name: Switch to edge branch
-          command: git checkout $EDGE_BUILD_BRANCH
+          command: git checkout -b $EDGE_BUILD_BRANCH
       - composer_tasks__edge_packages
       - run:
           name: Re-point dof-dss packages to use latest development code and push.
