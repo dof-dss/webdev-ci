@@ -297,6 +297,8 @@ jobs:
         type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
     steps:
       - attach_workspace:
           at: ./
