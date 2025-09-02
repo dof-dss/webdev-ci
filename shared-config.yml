@@ -244,7 +244,7 @@ jobs:
           name: Fetch Drupal core
           command: |
             cd $PROJECT_ROOT
-            composer create-project drupal/recommended-project:<< parameters.drupal_core_version >>.x-dev $PROJECT_ROOT --no-interaction
+            composer create-project drupal/recommended-project:^<< parameters.drupal_core_version >> $PROJECT_ROOT --no-interaction
       - run:
           name: Download dependent contrib modules.
           command: |
@@ -281,7 +281,7 @@ jobs:
           name: Fetch latest Drupal core and other misc composer tools.
           command: |
             cd $PROJECT_ROOT
-            composer create-project drupal/recommended-project:<< parameters.drupal_core_version >>.x-dev $PROJECT_ROOT --no-interaction
+            composer create-project drupal/recommended-project:^<< parameters.drupal_core_version >> $PROJECT_ROOT --no-interaction
             composer require --dev phpstan/extension-installer spaze/phpstan-disallowed-calls
       - run:
           name: Move custom code into position
@@ -297,6 +297,8 @@ jobs:
         type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
     steps:
       - attach_workspace:
           at: ./
