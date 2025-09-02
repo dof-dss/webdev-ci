@@ -12,7 +12,7 @@ Circle CI dynamic pipelines (https://circleci.com/docs/using-dynamic-configurati
 
 Use this starting template in your project's `.circleci/config.yml` file.
 
-Adjust the following JSON parameters that are passed into the pipeline continuation step.:
+Adjust the following JSON parameters that are passed into the pipeline continuation step:
 
 - `php_version`: make sure this matches your production value.
 - `drupal_core_version`: Set as required.
