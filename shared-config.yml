@@ -258,6 +258,51 @@ jobs:
           command: |
             cd $PROJECT_ROOT/web
             ../vendor/bin/drupal-check << parameters.custom_code_dirs >>
+  supporting_repo_phpstan:
+    parameters:
+      custom_code_dirs:
+        type: string
+      drupal_core_version:
+        type: string
+      php_version:
+        type: string
+      supporting_repo_dependent_packages:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
+    steps:
+      - checkout:
+          path: ~/dofdss
+      - run:
+          name: Move phpstan.neon into place for later use.
+          command: mv ~/dofdss/.circleci/phpstan.neon ~/
+      - run:
+          name: Fetch Drupal core
+          command: |
+            cd $PROJECT_ROOT
+            composer create-project drupal/recommended-project:^<< parameters.drupal_core_version >> $PROJECT_ROOT --no-interaction
+      - run:
+          name: Download dependent contrib modules and dev packages.
+          command: |
+            cd $PROJECT_ROOT
+            composer require << parameters.supporting_repo_dependent_packages >>
+            composer require --dev phpstan/extension-installer spaze/phpstan-disallowed-calls
+      - run:
+          name: Move custom code into position
+          command: mv ~/dofdss << parameters.custom_code_dirs >>
+      - run:
+          name: Move phpstan.neon into position
+          command: mv ~/phpstan.neon $PROJECT_ROOT/web/
+      - run:
+          name: Deprecated code check
+          command: |
+            cd $PROJECT_ROOT
+            vendor/bin/phpstan analyse -c web/phpstan.neon --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.custom_code_dirs >>
   supporting_repo_disallowed_functions:
     parameters:
       custom_code_dirs:
