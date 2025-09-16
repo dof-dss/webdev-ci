@@ -185,6 +185,25 @@ jobs:
       - run:
           name: Check for disallowed function calls
           command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
+  deprecated_code_phpstan:
+    parameters:
+      php_version:
+        type: string
+      deprecated_code_dirs:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Deprecated code check
+          command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>
   # SUPPORTING REPO jobs: used because Circle CI can't make things like attach_workspace
   # and checkout conditional so these are replicas of related jobs with minor functional adjustments.
   supporting_repo_coding_standards:
