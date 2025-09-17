@@ -238,7 +238,7 @@ jobs:
             chmod +x $PROJECT_ROOT/phpcs.sh
       - run:
           name: PHPCS analysis
-          command: $PROJECT_ROOT/phpcs.sh ~/ "${PROJECT_ROOT}"
+          command: $PROJECT_ROOT/phpcs.sh ~/ "${PROJECT_ROOT}" $PROJECT_ROOT/node_modules
   supporting_repo_deprecated_code:
     parameters:
       custom_code_dirs:
