@@ -147,8 +147,23 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
+          name: Fetch phpcs convenience script
+          shell: /bin/bash -eo pipefail
+          command: |
+            set -euo pipefail
+            RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/phpcs-from-webdev-ci/phpcs.sh"
+            curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
+            chmod +x /tmp/phpcs.sh
+      - run:
           name: PHPCS analysis
-          command: ${PROJECT_ROOT}/phpcs.sh "${PROJECT_ROOT}" "<< parameters.coding_standards_dirs >>" "<< parameters.ignore_dirs >>"
+          shell: /bin/bash -eo pipefail
+          command: |
+            set -euo pipefail
+            DRUPAL_DEPLOY_PATH="${PROJECT_ROOT}"
+            PHPCS_CHECK_DIR="<< parameters.coding_standards_dirs >>"
+            IGNORE="<< parameters.ignore_dirs >>"
+            exec /tmp/phpcs.sh "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIR}" "${IGNORE}"
+
   deprecated_code:
     parameters:
       php_version:
