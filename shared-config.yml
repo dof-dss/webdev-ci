@@ -151,7 +151,7 @@ jobs:
           shell: /bin/bash -eo pipefail
           command: |
             set -euo pipefail
-            RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/phpcs-from-webdev-ci/phpcs.sh"
+            RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/development/phpcs.sh"
             curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
             chmod +x /tmp/phpcs.sh
       - run:
