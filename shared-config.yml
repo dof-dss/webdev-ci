@@ -1,21 +1,18 @@
 version: 2.1
 
 parameters:
-  php_version:
-    type: string
-    default: "8.3"
-  drupal_core_version:
-    type: string
-    default: "10.4"
-  custom_code_dirs:
+  coding_standards_dirs:
     type: string
     default: ""
-  coding_standards_dirs:
+  custom_code_dirs:
     type: string
     default: ""
   deprecated_code_dirs:
     type: string
     default: ""
+  drupal_core_version:
+    type: string
+    default: "10.4"
   edge_branch:
     type: string
     default: ""
@@ -28,6 +25,12 @@ parameters:
   node_version:
     type: string
     default: ""
+  manual_trigger:
+    type: boolean
+    default: false
+  php_version:
+    type: string
+    default: "8.3"
   ssh_fingerprint:
     type: string
     default: ""
@@ -77,9 +80,30 @@ jobs:
       - hosts_keyscan
       - checkout_code
       - install_psh_cli
+      # If edge_branch wasn't provided, detect current branch (helps for manual runs)
       - run:
-          name: Switch to edge branch
-          command: git checkout -b $EDGE_BUILD_BRANCH
+          name: Ensure EDGE_BUILD_BRANCH is set
+          shell: /bin/bash -eo pipefail
+          command: |
+            if [ -z "${EDGE_BUILD_BRANCH:-}" ]; then
+              CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+              echo "export EDGE_BUILD_BRANCH=$CURRENT_BRANCH" >> "$BASH_ENV"
+              echo "EDGE_BUILD_BRANCH not provided; using current branch: $CURRENT_BRANCH"
+            else
+              echo "EDGE_BUILD_BRANCH provided: $EDGE_BUILD_BRANCH"
+            fi
+      # Only try to create/switch if NOT a manual trigger AND an edge_branch was provided.
+      - when:
+          condition:
+            and:
+              - equal: [false, << pipeline.parameters.manual_trigger >>]
+              - not:
+                  equal: ["", << pipeline.parameters.edge_branch >>]
+          steps:
+            - run:
+                name: Switch to edge branch
+                command: git checkout -b "$EDGE_BUILD_BRANCH"
+      # Always run composer + push
       - composer_tasks__edge_packages
       - run:
           name: Re-point dof-dss packages to use latest development code and push.
