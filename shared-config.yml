@@ -25,9 +25,6 @@ parameters:
   node_version:
     type: string
     default: ""
-  manual_trigger:
-    type: boolean
-    default: false
   php_version:
     type: string
     default: "8.3"
