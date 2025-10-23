@@ -57,6 +57,7 @@ jobs:
           root: ./
           paths:
             - ./
+
   build_edge:
     parameters:
       edge_branch:
@@ -86,15 +87,37 @@ jobs:
               git checkout -b "$EDGE_BUILD_BRANCH"
             fi
       - composer_tasks__edge_packages
+      # Commit only if composer files changed
       - run:
-          name: Re-point dof-dss packages to use latest development code and push.
+          name: Commit composer changes (if any)
+          shell: /bin/bash -eo pipefail
           command: |
-            git add composer.*
-            git commit -m "Set dof-dss packages to HEAD development for build"
+            set -euo pipefail
+            if git diff --quiet -- composer.json composer.lock; then
+              echo "No composer changes – skipping commit."
+              echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
+            else
+              git add composer.json composer.lock
+              if git commit -m "Set dof-dss packages to HEAD development for build"; then
+                echo "Committed composer changes."
+                echo 'export EDGE_DID_COMMIT=1' >> "$BASH_ENV"
+              else
+                echo "Nothing to commit – skipping."
+                echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
+              fi
+            fi
+
+      # NEW: push only if a commit was made
       - run:
-          name: Push changes back to GitHub
+          name: Push changes back to GitHub (if any)
+          shell: /bin/bash -eo pipefail
           command: |
-            git push -f origin $EDGE_BUILD_BRANCH
+            set -euo pipefail
+            if [ "${EDGE_DID_COMMIT:-0}" = "1" ]; then
+              git push -f origin "$EDGE_BUILD_BRANCH"
+            else
+              echo "No new commit – nothing to push."
+            fi
 
   sync_data:
     parameters:
@@ -188,6 +211,7 @@ jobs:
       - run:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
+
   disallowed_functions:
     parameters:
       php_version:
@@ -205,6 +229,7 @@ jobs:
       - run:
           name: Check for disallowed function calls
           command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
+
   deprecated_code_phpstan:
     parameters:
       php_version:
@@ -224,6 +249,7 @@ jobs:
       - run:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>
+
   # SUPPORTING REPO jobs: used because Circle CI can't make things like attach_workspace
   # and checkout conditional so these are replicas of related jobs with minor functional adjustments.
   supporting_repo_coding_standards:
@@ -243,14 +269,8 @@ jobs:
           name: Fetch phpcs and dependencies
           command: |
             composer require drupal/coder --prefer-stable --no-interaction --optimize-autoloader
-            # Move vendor and core directories up a level, out of the way, as we don't want to code-check all of that.
-            if [ -d vendor ]; then
-              mv vendor ../
-            fi
-
-            if [ -d core ]; then
-              mv core ../
-            fi
+            if [ -d vendor ]; then mv vendor ../; fi
+            if [ -d core ]; then mv core ../; fi
       - run:
           name: Fetch phpcs convenience script
           command: |
@@ -259,6 +279,7 @@ jobs:
       - run:
           name: PHPCS analysis
           command: $PROJECT_ROOT/phpcs.sh ~/ "${PROJECT_ROOT}" $PROJECT_ROOT/node_modules
+
   supporting_repo_deprecated_code:
     parameters:
       custom_code_dirs:
@@ -297,6 +318,7 @@ jobs:
           command: |
             cd $PROJECT_ROOT/web
             ../vendor/bin/drupal-check << parameters.custom_code_dirs >>
+
   supporting_repo_phpstan:
     parameters:
       custom_code_dirs:
@@ -342,6 +364,7 @@ jobs:
           command: |
             cd $PROJECT_ROOT
             vendor/bin/phpstan analyse -c web/phpstan.neon --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.custom_code_dirs >>
+
   supporting_repo_disallowed_functions:
     parameters:
       custom_code_dirs:
@@ -374,6 +397,7 @@ jobs:
           name: Check for disallowed function calls
           command: |
             vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c ~/phpstan.neon
+
   # UNITY check for differences in upstream Drupal profile.
   check_illegal_updates:
     parameters:
@@ -406,6 +430,7 @@ jobs:
             diff maestro-drupal-unity/web/sites/site.settings.php web/sites/site.settings.php
             echo "** checking sites.php  **"
             diff maestro-drupal-unity/web/sites/sites.php web/sites/sites.php
+
   # Checks to ensure that Unity Base has not been polluted with project files.
   unity_base_checks:
     parameters:
@@ -488,6 +513,7 @@ jobs:
             git add *.css
             git commit -m "Theme rebuild"
             git push -f origin $EDGE_BUILD_BRANCH
+
   # Separate task to allow us to sync data on PSH environments, without pauses in other jobs.
   unity_sync_data:
     parameters:
@@ -600,6 +626,7 @@ jobs:
           root: ./
           paths:
             - ./
+
   theme_lint:
     parameters:
       php_version:
@@ -617,6 +644,7 @@ jobs:
           name: Lint all frontend code
           command: |
             npm run lint
+
   theme_build_assets:
     parameters:
       php_version:
@@ -633,6 +661,7 @@ jobs:
       - run:
           name: Build theme assets
           command: npm run build
+
 commands:
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
