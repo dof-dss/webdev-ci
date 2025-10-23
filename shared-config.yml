@@ -87,8 +87,7 @@ jobs:
               git checkout -b "$EDGE_BUILD_BRANCH"
             fi
       - composer_tasks__edge_packages
-
-      # NEW: commit only if composer files changed
+      # Commit only if composer files changed
       - run:
           name: Commit composer changes (if any)
           shell: /bin/bash -eo pipefail
@@ -251,7 +250,8 @@ jobs:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>
 
-  # SUPPORTING REPO jobs.
+  # SUPPORTING REPO jobs: used because Circle CI can't make things like attach_workspace
+  # and checkout conditional so these are replicas of related jobs with minor functional adjustments.
   supporting_repo_coding_standards:
     parameters:
       php_version:
