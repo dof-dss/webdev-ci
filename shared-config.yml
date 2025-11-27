@@ -37,6 +37,7 @@ parameters:
 
 jobs:
   build:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -59,6 +60,7 @@ jobs:
             - ./
 
   build_edge:
+    shell: /bin/bash -euo pipefail
     parameters:
       edge_branch:
         type: string
@@ -79,20 +81,29 @@ jobs:
       - checkout_code
       - install_psh_cli
       - run:
-          name: Switch/create edge branch (idempotent)
+          name: Switch/create edge branch from latest development (idempotent)
+          shell: /bin/bash -eo pipefail
           command: |
+            echo "Fetching latest origin/development…"
+            git fetch origin development
             if git rev-parse --verify "$EDGE_BUILD_BRANCH" >/dev/null 2>&1; then
+              echo "Using existing local edge branch: $EDGE_BUILD_BRANCH"
               git checkout "$EDGE_BUILD_BRANCH"
+              echo "Merging origin/development into $EDGE_BUILD_BRANCH…"
+              if ! git merge --no-edit origin/development; then
+                echo "ERROR: Merge of origin/development into $EDGE_BUILD_BRANCH failed."
+                echo "Please resolve conflicts locally and push an updated $EDGE_BUILD_BRANCH."
+                exit 1
+              fi
             else
-              git checkout -b "$EDGE_BUILD_BRANCH"
+              echo "Creating edge branch $EDGE_BUILD_BRANCH from origin/development…"
+              git checkout -b "$EDGE_BUILD_BRANCH" origin/development
             fi
       - composer_tasks__edge_packages
-      # Commit only if composer files changed
       - run:
           name: Commit composer changes (if any)
           shell: /bin/bash -eo pipefail
           command: |
-            set -euo pipefail
             if git diff --quiet -- composer.json composer.lock; then
               echo "No composer changes – skipping commit."
               echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
@@ -106,13 +117,10 @@ jobs:
                 echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
               fi
             fi
-
-      # NEW: push only if a commit was made
       - run:
           name: Push changes back to GitHub (if any)
           shell: /bin/bash -eo pipefail
           command: |
-            set -euo pipefail
             if [ "${EDGE_DID_COMMIT:-0}" = "1" ]; then
               git push -f origin "$EDGE_BUILD_BRANCH"
             else
@@ -120,6 +128,7 @@ jobs:
             fi
 
   sync_data:
+    shell: /bin/bash -euo pipefail
     parameters:
       edge_branch:
         type: string
@@ -157,6 +166,7 @@ jobs:
             platform environment:drush password_qa_accounts -e $EDGE_BUILD_BRANCH
 
   coding_standards:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -178,7 +188,6 @@ jobs:
           name: Fetch phpcs convenience script
           shell: /bin/bash -eo pipefail
           command: |
-            set -euo pipefail
             RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/development/phpcs.sh"
             curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
             chmod +x /tmp/phpcs.sh
@@ -186,13 +195,13 @@ jobs:
           name: PHPCS analysis
           shell: /bin/bash -eo pipefail
           command: |
-            set -euo pipefail
             DRUPAL_DEPLOY_PATH="${PROJECT_ROOT}"
             PHPCS_CHECK_DIR="<< parameters.coding_standards_dirs >>"
             IGNORE="<< parameters.ignore_dirs >>"
             exec /tmp/phpcs.sh "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIR}" "${IGNORE}"
 
   deprecated_code:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -213,6 +222,7 @@ jobs:
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
 
   disallowed_functions:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -231,6 +241,7 @@ jobs:
           command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
 
   deprecated_code_phpstan:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -253,6 +264,7 @@ jobs:
   # SUPPORTING REPO jobs: used because Circle CI can't make things like attach_workspace
   # and checkout conditional so these are replicas of related jobs with minor functional adjustments.
   supporting_repo_coding_standards:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -281,6 +293,7 @@ jobs:
           command: $PROJECT_ROOT/phpcs.sh ~/ "${PROJECT_ROOT}" $PROJECT_ROOT/node_modules
 
   supporting_repo_deprecated_code:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -320,6 +333,7 @@ jobs:
             ../vendor/bin/drupal-check << parameters.custom_code_dirs >>
 
   supporting_repo_phpstan:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -366,6 +380,7 @@ jobs:
             vendor/bin/phpstan analyse -c web/phpstan.neon --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.custom_code_dirs >>
 
   supporting_repo_disallowed_functions:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -400,6 +415,7 @@ jobs:
 
   # UNITY check for differences in upstream Drupal profile.
   check_illegal_updates:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -433,6 +449,7 @@ jobs:
 
   # Checks to ensure that Unity Base has not been polluted with project files.
   unity_base_checks:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -453,6 +470,7 @@ jobs:
 
   # UNITY Nightly edge build
   unity_edge_build:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -516,6 +534,7 @@ jobs:
 
   # Separate task to allow us to sync data on PSH environments, without pauses in other jobs.
   unity_sync_data:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -602,6 +621,7 @@ jobs:
 
   # THEMING repo jobs.
   theme_install:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -628,6 +648,7 @@ jobs:
             - ./
 
   theme_lint:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -646,6 +667,7 @@ jobs:
             npm run lint
 
   theme_build_assets:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
