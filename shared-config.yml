@@ -266,7 +266,7 @@ jobs:
     parameters:
       php_version:
         type: string
-      deprecated_code_dirs:
+      custom_code_dirs:
         type: string
     docker:
       - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
