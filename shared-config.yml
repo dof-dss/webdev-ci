@@ -279,6 +279,9 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
+          name: Prep directory for simpletest and make it writable.
+          command: mkdir -p /var/www/html/web/sites/simpletest/browser_output && chmod ugo+rw /var/www/html/web/sites/simpletest/browser_output
+      - run:
           name: Run unit tests for our custom code using phpunit.xml config in project root
           command: cd $PROJECT_ROOT && vendor/bin/phpunit --testsuite unit
 
