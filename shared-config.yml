@@ -89,8 +89,8 @@ jobs:
             if git rev-parse --verify "$EDGE_BUILD_BRANCH" >/dev/null 2>&1; then
               echo "Using existing local edge branch: $EDGE_BUILD_BRANCH"
               git checkout "$EDGE_BUILD_BRANCH"
-              echo "Merging origin/development into $EDGE_BUILD_BRANCH…"
-              if ! git merge --no-edit origin/development; then
+              echo "Merging origin/development into $EDGE_BUILD_BRANCH, defer to incoming changes if local conflicts"
+              if ! git merge -X theirs --no-edit origin/development; then
                 echo "ERROR: Merge of origin/development into $EDGE_BUILD_BRANCH failed."
                 echo "Please resolve conflicts locally and push an updated $EDGE_BUILD_BRANCH."
                 exit 1
