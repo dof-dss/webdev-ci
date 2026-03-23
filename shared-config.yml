@@ -310,7 +310,7 @@ jobs:
       - run:
           name: Fetch phpcs convenience script
           command: |
-            curl https://raw.githubusercontent.com/dof-dss/nidirect-drupal/main/phpcs.sh -o $PROJECT_ROOT/phpcs.sh
+            curl https://raw.githubusercontent.com/dof-dss/webdev-ci/development/phpcs.sh -o $PROJECT_ROOT/phpcs.sh
             chmod +x $PROJECT_ROOT/phpcs.sh
       - run:
           name: PHPCS analysis
