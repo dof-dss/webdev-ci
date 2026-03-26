@@ -74,7 +74,7 @@ fi
 echo "----------------------------------------------------------------------"
 
 "${PHPCS_PATH}" --config-set installed_paths \
-  "${DRUPAL_DEPLOY_PATH}/vendor/drupal/coder/coder_sniffer,${DRUPAL_DEPLOY_PATH}/vendor/slevomat/coding-standard"
+  "${DRUPAL_DEPLOY_PATH}/vendor/drupal/coder/coder_sniffer,${DRUPAL_DEPLOY_PATH}/vendor/sirbrillig/phpcs-variable-analysis,${DRUPAL_DEPLOY_PATH}/vendor/slevomat/coding-standard"
 
 EXCLUDE="$(IFS=, ; echo "${DRUPAL_EXCLUDED_SNIFFS[*]}")"
 
