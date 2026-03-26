@@ -196,9 +196,9 @@ jobs:
           shell: /bin/bash -eo pipefail
           command: |
             DRUPAL_DEPLOY_PATH="${PROJECT_ROOT}"
-            PHPCS_CHECK_DIR="<< parameters.coding_standards_dirs >>"
-            IGNORE="<< parameters.ignore_dirs >>"
-            exec /tmp/phpcs.sh "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIR}" "${IGNORE}"
+            PHPCS_CHECK_DIRS="<< parameters.coding_standards_dirs >>"
+            IGNORE_DIRS="<< parameters.ignore_dirs >>"
+            exec /tmp/phpcs.sh "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIRS}" "${IGNORE_DIRS}"
 
   deprecated_code:
     shell: /bin/bash -euo pipefail
