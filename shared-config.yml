@@ -1,21 +1,18 @@
 version: 2.1
 
 parameters:
-  php_version:
-    type: string
-    default: "8.3"
-  drupal_core_version:
-    type: string
-    default: "10.4"
-  custom_code_dirs:
+  coding_standards_dirs:
     type: string
     default: ""
-  coding_standards_dirs:
+  custom_code_dirs:
     type: string
     default: ""
   deprecated_code_dirs:
     type: string
     default: ""
+  drupal_core_version:
+    type: string
+    default: "10.4"
   edge_branch:
     type: string
     default: ""
@@ -28,6 +25,9 @@ parameters:
   node_version:
     type: string
     default: ""
+  php_version:
+    type: string
+    default: "8.3"
   ssh_fingerprint:
     type: string
     default: ""
@@ -37,6 +37,7 @@ parameters:
 
 jobs:
   build:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -57,7 +58,9 @@ jobs:
           root: ./
           paths:
             - ./
+
   build_edge:
+    shell: /bin/bash -euo pipefail
     parameters:
       edge_branch:
         type: string
@@ -78,20 +81,54 @@ jobs:
       - checkout_code
       - install_psh_cli
       - run:
-          name: Switch to edge branch
-          command: git checkout -b $EDGE_BUILD_BRANCH
+          name: Switch/create edge branch from latest development (idempotent)
+          shell: /bin/bash -eo pipefail
+          command: |
+            echo "Fetching latest origin/development…"
+            git fetch origin development
+            if git rev-parse --verify "$EDGE_BUILD_BRANCH" >/dev/null 2>&1; then
+              echo "Using existing local edge branch: $EDGE_BUILD_BRANCH"
+              git checkout "$EDGE_BUILD_BRANCH"
+              echo "Merging origin/development into $EDGE_BUILD_BRANCH, defer to incoming changes if local conflicts"
+              if ! git merge -X theirs --no-edit origin/development; then
+                echo "ERROR: Merge of origin/development into $EDGE_BUILD_BRANCH failed."
+                echo "Please resolve conflicts locally and push an updated $EDGE_BUILD_BRANCH."
+                exit 1
+              fi
+            else
+              echo "Creating edge branch $EDGE_BUILD_BRANCH from origin/development…"
+              git checkout -b "$EDGE_BUILD_BRANCH" origin/development
+            fi
       - composer_tasks__edge_packages
       - run:
-          name: Re-point dof-dss packages to use latest development code and push.
+          name: Commit composer changes (if any)
+          shell: /bin/bash -eo pipefail
           command: |
-            git add composer.*
-            git commit -m "Set dof-dss packages to HEAD development for build"
+            if git diff --quiet -- composer.json composer.lock; then
+              echo "No composer changes – skipping commit."
+              echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
+            else
+              git add composer.json composer.lock
+              if git commit -m "Set dof-dss packages to HEAD development for build"; then
+                echo "Committed composer changes."
+                echo 'export EDGE_DID_COMMIT=1' >> "$BASH_ENV"
+              else
+                echo "Nothing to commit – skipping."
+                echo 'export EDGE_DID_COMMIT=0' >> "$BASH_ENV"
+              fi
+            fi
       - run:
-          name: Push changes back to GitHub
+          name: Push changes back to GitHub (if any)
+          shell: /bin/bash -eo pipefail
           command: |
-            git push -f origin $EDGE_BUILD_BRANCH
+            if [ "${EDGE_DID_COMMIT:-0}" = "1" ]; then
+              git push -f origin "$EDGE_BUILD_BRANCH"
+            else
+              echo "No new commit – nothing to push."
+            fi
 
   sync_data:
+    shell: /bin/bash -euo pipefail
     parameters:
       edge_branch:
         type: string
@@ -129,6 +166,7 @@ jobs:
             platform environment:drush password_qa_accounts -e $EDGE_BUILD_BRANCH
 
   coding_standards:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -147,9 +185,23 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
+          name: Fetch phpcs convenience script
+          shell: /bin/bash -eo pipefail
+          command: |
+            RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/development/phpcs.sh"
+            curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
+            chmod +x /tmp/phpcs.sh
+      - run:
           name: PHPCS analysis
-          command: ${PROJECT_ROOT}/phpcs.sh "${PROJECT_ROOT}" "<< parameters.coding_standards_dirs >>" "<< parameters.ignore_dirs >>"
+          shell: /bin/bash -eo pipefail
+          command: |
+            DRUPAL_DEPLOY_PATH="${PROJECT_ROOT}"
+            PHPCS_CHECK_DIRS="<< parameters.coding_standards_dirs >>"
+            IGNORE_DIRS="<< parameters.ignore_dirs >>"
+            exec /tmp/phpcs.sh "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIRS}" "${IGNORE_DIRS}"
+
   deprecated_code:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -168,7 +220,9 @@ jobs:
       - run:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/drupal-check << parameters.deprecated_code_dirs >>
+
   disallowed_functions:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -185,7 +239,9 @@ jobs:
       - run:
           name: Check for disallowed function calls
           command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
+
   deprecated_code_phpstan:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -204,9 +260,35 @@ jobs:
       - run:
           name: Deprecated code check
           command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>
+
+  unit_tests:
+    shell: /bin/bash -euo pipefail
+    parameters:
+      php_version:
+        type: string
+      custom_code_dirs:
+        type: string
+    docker:
+      - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+        environment:
+          PLATFORM_REGION: "uk-1.platform.sh"
+          PROJECT_ROOT: "/home/docker/project"
+          PHP_EXTENSION_GD: 1
+          PHP_INI_MEMORY_LIMIT: 1g
+    steps:
+      - attach_workspace:
+          at: ./
+      - run:
+          name: Prep directory for simpletest and make it writable.
+          command: mkdir -p /var/www/html/web/sites/simpletest/browser_output && chmod ugo+rw /var/www/html/web/sites/simpletest/browser_output
+      - run:
+          name: Run unit tests for our custom code using phpunit.xml config in project root
+          command: cd $PROJECT_ROOT && vendor/bin/phpunit --testsuite unit
+
   # SUPPORTING REPO jobs: used because Circle CI can't make things like attach_workspace
   # and checkout conditional so these are replicas of related jobs with minor functional adjustments.
   supporting_repo_coding_standards:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -222,24 +304,20 @@ jobs:
       - run:
           name: Fetch phpcs and dependencies
           command: |
-            composer require drupal/coder --prefer-stable --no-interaction --optimize-autoloader
-            # Move vendor and core directories up a level, out of the way, as we don't want to code-check all of that.
-            if [ -d vendor ]; then
-              mv vendor ../
-            fi
-
-            if [ -d core ]; then
-              mv core ../
-            fi
+            composer require drupal/coder sirbrillig/phpcs-variable-analysis --prefer-stable --no-interaction --optimize-autoloader
+            if [ -d vendor ]; then mv vendor ../; fi
+            if [ -d core ]; then mv core ../; fi
       - run:
           name: Fetch phpcs convenience script
           command: |
-            curl https://raw.githubusercontent.com/dof-dss/nidirect-drupal/main/phpcs.sh -o $PROJECT_ROOT/phpcs.sh
+            curl https://raw.githubusercontent.com/dof-dss/webdev-ci/development/phpcs.sh -o $PROJECT_ROOT/phpcs.sh
             chmod +x $PROJECT_ROOT/phpcs.sh
       - run:
           name: PHPCS analysis
           command: $PROJECT_ROOT/phpcs.sh ~/ "${PROJECT_ROOT}" $PROJECT_ROOT/node_modules
+
   supporting_repo_deprecated_code:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -277,7 +355,9 @@ jobs:
           command: |
             cd $PROJECT_ROOT/web
             ../vendor/bin/drupal-check << parameters.custom_code_dirs >>
+
   supporting_repo_phpstan:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -322,7 +402,9 @@ jobs:
           command: |
             cd $PROJECT_ROOT
             vendor/bin/phpstan analyse -c web/phpstan.neon --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.custom_code_dirs >>
+
   supporting_repo_disallowed_functions:
+    shell: /bin/bash -euo pipefail
     parameters:
       custom_code_dirs:
         type: string
@@ -354,8 +436,10 @@ jobs:
           name: Check for disallowed function calls
           command: |
             vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c ~/phpstan.neon
+
   # UNITY check for differences in upstream Drupal profile.
   check_illegal_updates:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -386,8 +470,10 @@ jobs:
             diff maestro-drupal-unity/web/sites/site.settings.php web/sites/site.settings.php
             echo "** checking sites.php  **"
             diff maestro-drupal-unity/web/sites/sites.php web/sites/sites.php
+
   # Checks to ensure that Unity Base has not been polluted with project files.
   unity_base_checks:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -408,6 +494,7 @@ jobs:
 
   # UNITY Nightly edge build
   unity_edge_build:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -468,8 +555,10 @@ jobs:
             git add *.css
             git commit -m "Theme rebuild"
             git push -f origin $EDGE_BUILD_BRANCH
+
   # Separate task to allow us to sync data on PSH environments, without pauses in other jobs.
   unity_sync_data:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -556,6 +645,7 @@ jobs:
 
   # THEMING repo jobs.
   theme_install:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -580,7 +670,9 @@ jobs:
           root: ./
           paths:
             - ./
+
   theme_lint:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -597,7 +689,9 @@ jobs:
           name: Lint all frontend code
           command: |
             npm run lint
+
   theme_build_assets:
+    shell: /bin/bash -euo pipefail
     parameters:
       php_version:
         type: string
@@ -613,6 +707,7 @@ jobs:
       - run:
           name: Build theme assets
           command: npm run build
+
 commands:
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
