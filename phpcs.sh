@@ -1,81 +1,103 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-# Require all arguments
 if [ "$#" -ne 3 ]; then
-  echo "Usage: $0 <DRUPAL_DEPLOY_PATH> <PHPCS_CHECK_DIR> <IGNORE>"
-  echo "  DRUPAL_DEPLOY_PATH: Path to Drupal deployment (e.g., /var/www/deploy)"
-  echo "  PHPCS_CHECK_DIR: Directory to check (e.g., web/modules/custom)"
-  echo "  IGNORE: Comma-separated directories to ignore, relative to DRUPAL_DEPLOY_PATH or absolute (e.g., web/themes/custom/mytheme/node_modules,web/modules/custom/my_module/tests)"
+  echo "Usage: $0 <DRUPAL_DEPLOY_PATH> <PHPCS_CHECK_DIRS> <IGNORE_DIRS>"
+  echo "  DRUPAL_DEPLOY_PATH: Path to Drupal deployment (e.g., /home/docker/project)"
+  echo "  PHPCS_CHECK_DIRS: Space-separated directories to check, relative to DRUPAL_DEPLOY_PATH or absolute"
+  echo "  IGNORE_DIRS: Space-separated directories to ignore, relative to DRUPAL_DEPLOY_PATH or absolute"
   exit 1
 fi
 
-DRUPAL_DEPLOY_PATH=$1
-PHPCS_CHECK_DIR=$2
-IGNORE=$3
+DRUPAL_DEPLOY_PATH="$1"
+PHPCS_CHECK_DIRS_RAW="$2"
+IGNORE_DIRS_RAW="$3"
 
-# Split IGNORE into array, prepend DRUPAL_DEPLOY_PATH to each if not absolute, then join back.
-IFS=',' read -ra IGNORE_ITEMS <<< "$IGNORE"
-IGNORE_PATHS=""
-for item in "${IGNORE_ITEMS[@]}"; do
-    # Trim whitespace
-    trimmed=$(echo "$item" | xargs)
-    # If path is not absolute, prepend DRUPAL_DEPLOY_PATH
-    if [[ "$trimmed" = /* ]]; then
-        fullpath="$trimmed"
-    else
-        fullpath="${DRUPAL_DEPLOY_PATH}/${trimmed}"
-    fi
-    # Comma separate, no trailing comma
-    if [ -z "$IGNORE_PATHS" ]; then
-        IGNORE_PATHS="$fullpath"
-    else
-        IGNORE_PATHS="$IGNORE_PATHS,$fullpath"
-    fi
-done
-
-# Dependencies are added with composer. Shouldn't be using a global install even if available.
 PHPCS_PATH="${DRUPAL_DEPLOY_PATH}/vendor/bin/phpcs"
-PHPCBF_PATH="${DRUPAL_DEPLOY_PATH}/vendor/bin/phpcbf"
-
-# Define extensions we're interested in checking.
 PHPCS_EXTENSIONS="php,inc,module,theme"
 
-# Exclude some fussier/less valuable sniffs.
 DRUPAL_EXCLUDED_SNIFFS=(
-    Drupal.Commenting.DocComment
-    Drupal.Commenting.ClassComment
+  Drupal.Commenting.DocComment
+  Drupal.Commenting.ClassComment
 )
 
 DRUPAL_PRACTICE_EXCLUDED_SNIFFS=(
   DrupalPractice.Objects.StrictSchemaDisabled
 )
 
-# Comma separated list of npm or non-PHP related FE toolchain directories we want to ignore.
-IGNORE="${DRUPAL_DEPLOY_PATH}/web/themes/origins/node_modules,${DRUPAL_DEPLOY_PATH}/web/themes/custom/nicsdru_dept_theme/node_modules"
-echo "----------------------------------------------------------------------"
-echo ">>> Running coding standard checks in: ${PHPCS_CHECK_DIR}"
-echo ">>> Ignoring directories: ${IGNORE}"
-echo "----------------------------------------------------------------------"
+normalize_paths_to_array() {
+  local raw="$1"
+  local -n out_array=$2
+  local item trimmed fullpath
 
-# Configure PHPCS.
-${PHPCS_PATH} --config-set installed_paths ${DRUPAL_DEPLOY_PATH}/vendor/drupal/coder/coder_sniffer,${DRUPAL_DEPLOY_PATH}/vendor/slevomat/coding-standard
+  out_array=()
 
-EXCLUDE=$(IFS=, ; echo "${DRUPAL_EXCLUDED_SNIFFS[*]}")
-${PHPCS_PATH} -nq --standard=Drupal --extensions=${PHPCS_EXTENSIONS} --exclude=${EXCLUDE} --ignore=${IGNORE} ${PHPCS_CHECK_DIR}
-if [ $? != 0 ]
-then
-    echo "🚫 Drupal coding standards checks failed, see above for details 🚫"
-    exit 1
+  # Split on normal shell whitespace.
+  read -r -a items <<< "$raw"
+
+  for item in "${items[@]}"; do
+    trimmed="$(echo "$item" | xargs)"
+    [ -z "$trimmed" ] && continue
+
+    if [[ "$trimmed" = /* ]]; then
+      fullpath="$trimmed"
+    else
+      fullpath="${DRUPAL_DEPLOY_PATH}/${trimmed}"
+    fi
+
+    out_array+=("$fullpath")
+  done
+}
+
+normalize_paths_to_array "$PHPCS_CHECK_DIRS_RAW" CHECK_DIRS
+normalize_paths_to_array "$IGNORE_DIRS_RAW" IGNORE_DIRS_ARRAY
+
+if [ "${#CHECK_DIRS[@]}" -eq 0 ]; then
+  echo "ERROR: No PHPCS check directories were provided."
+  exit 1
 fi
 
-# Run Drupal best practice checks too.
-EXCLUDE=$(IFS=, ; echo "${DRUPAL_PRACTICE_EXCLUDED_SNIFFS[*]}")
-${PHPCS_PATH} -nq --standard=DrupalPractice --extensions=${PHPCS_EXTENSIONS} --exclude=${EXCLUDE} --ignore=${IGNORE} ${PHPCS_CHECK_DIR}
-if [ $? != 0 ]
-then
-    echo "🚫 Drupal best practice checks failed, see above for details 🚫"
-    exit 1
+IGNORE_PATHS=""
+if [ "${#IGNORE_DIRS_ARRAY[@]}" -gt 0 ]; then
+  IGNORE_PATHS="$(IFS=, ; echo "${IGNORE_DIRS_ARRAY[*]}")"
 fi
 
-## Make it clearer when the script succeeds.
+echo "----------------------------------------------------------------------"
+echo ">>> Running coding standard checks in:"
+printf ' - %s\n' "${CHECK_DIRS[@]}"
+echo ">>> Ignoring directories:"
+if [ -n "$IGNORE_PATHS" ]; then
+  printf ' - %s\n' "${IGNORE_DIRS_ARRAY[@]}"
+else
+  echo " - none"
+fi
+echo "----------------------------------------------------------------------"
+
+"${PHPCS_PATH}" --config-set installed_paths \
+  "${DRUPAL_DEPLOY_PATH}/vendor/drupal/coder/coder_sniffer,${DRUPAL_DEPLOY_PATH}/vendor/sirbrillig/phpcs-variable-analysis,${DRUPAL_DEPLOY_PATH}/vendor/slevomat/coding-standard"
+
+EXCLUDE="$(IFS=, ; echo "${DRUPAL_EXCLUDED_SNIFFS[*]}")"
+
+if ! "${PHPCS_PATH}" -nq \
+  --standard=Drupal \
+  --extensions="${PHPCS_EXTENSIONS}" \
+  --exclude="${EXCLUDE}" \
+  ${IGNORE_PATHS:+--ignore="${IGNORE_PATHS}"} \
+  "${CHECK_DIRS[@]}"; then
+  echo "🚫 Drupal coding standards checks failed, see above for details 🚫"
+  exit 1
+fi
+
+EXCLUDE="$(IFS=, ; echo "${DRUPAL_PRACTICE_EXCLUDED_SNIFFS[*]}")"
+
+if ! "${PHPCS_PATH}" -nq \
+  --standard=DrupalPractice \
+  --extensions="${PHPCS_EXTENSIONS}" \
+  --exclude="${EXCLUDE}" \
+  ${IGNORE_PATHS:+--ignore="${IGNORE_PATHS}"} \
+  "${CHECK_DIRS[@]}"; then
+  echo "🚫 Drupal best practice checks failed, see above for details 🚫"
+  exit 1
+fi
+
 echo "LGTM ✅"
