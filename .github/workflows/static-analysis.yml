@@ -140,7 +140,7 @@ jobs:
             exit 0
           fi
 
-          RAW_URL="https://raw.githubusercontent.com/johangant/webdev-ci/${{ inputs.phpcs_helper_ref }}/phpcs.sh"
+          RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/${{ inputs.phpcs_helper_ref }}/phpcs.sh"
           curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
           chmod +x /tmp/phpcs.sh
 
@@ -152,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          RAW_URL="https://raw.githubusercontent.com/johangant/webdev-ci/${{ inputs.phpcs_helper_ref }}/phpcs.sh"
+          RAW_URL="https://raw.githubusercontent.com/dof-dss/webdev-ci/${{ inputs.phpcs_helper_ref }}/phpcs.sh"
           curl -fsSL "${RAW_URL}" -o /tmp/phpcs.sh
           chmod +x /tmp/phpcs.sh
 
