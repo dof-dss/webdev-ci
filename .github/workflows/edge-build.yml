@@ -1,0 +1,173 @@
+name: Edge build
+
+on:
+  workflow_call:
+    inputs:
+      source_branch:
+        required: false
+        type: string
+        default: development
+      edge_build_branch:
+        required: false
+        type: string
+        default: edge
+      php_version:
+        required: false
+        type: string
+        default: '8.3'
+      edge_build_dofdss_packages:
+        required: false
+        type: string
+        default: ''
+      gac_secret_name:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      PLATFORM_CLI_TOKEN:
+        required: true
+      PLATFORM_PROJECT:
+        required: true
+      GAC_ACCESS_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: edge-build-${{ github.repository }}-${{ inputs.edge_build_branch }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ROOT: ${{ github.workspace }}
+  GIT_AUTHOR_NAME: GitHub Actions
+  GIT_COMMITTER_NAME: GitHub Actions
+  EMAIL: github-actions@localhost
+
+jobs:
+  edge-build:
+    name: Build edge branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_branch }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: gd, mbstring, xml, intl, zip
+          coverage: none
+          tools: composer
+
+      - name: Configure git identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email "${EMAIL}"
+          git config user.name "${GIT_AUTHOR_NAME}"
+
+      - name: Switch or create edge branch from latest source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${{ inputs.source_branch }}"
+
+          if git ls-remote --exit-code --heads origin "${{ inputs.edge_build_branch }}" >/dev/null 2>&1; then
+            git checkout -B "${{ inputs.edge_build_branch }}" "origin/${{ inputs.edge_build_branch }}"
+            git merge -X theirs --no-edit "origin/${{ inputs.source_branch }}" || {
+              echo "ERROR: Merge into edge branch failed."
+              exit 1
+            }
+          else
+            git checkout -b "${{ inputs.edge_build_branch }}" "origin/${{ inputs.source_branch }}"
+          fi
+
+      - name: Update dof-dss edge packages
+        if: inputs.edge_build_dofdss_packages != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer require ${{ inputs.edge_build_dofdss_packages }} --no-interaction --no-progress
+
+      - name: Commit composer changes if any
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- composer.json composer.lock; then
+            echo "No composer changes."
+            echo "EDGE_DID_COMMIT=0" >> "$GITHUB_ENV"
+          else
+            git add composer.json composer.lock
+            git commit -m "Set dof-dss packages to HEAD development for build"
+            echo "EDGE_DID_COMMIT=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Push edge branch if changed
+        if: env.EDGE_DID_COMMIT == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push -f origin "${{ inputs.edge_build_branch }}"
+
+  sync-data:
+    name: Sync production data to edge
+    runs-on: ubuntu-latest
+    needs: edge-build
+    if: success()
+
+    steps:
+      - name: Checkout edge branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.edge_build_branch }}
+
+      - name: Install Platform.sh CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/platformsh/cli/main/installer.sh | bash
+          echo "$HOME/.platformsh/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate Platform.sh CLI
+        env:
+          PLATFORM_CLI_TOKEN: ${{ secrets.PLATFORM_CLI_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform auth:api-token-login --api-token "$PLATFORM_CLI_TOKEN"
+
+      - name: Sync production data
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform sync data -p "$PLATFORM_PROJECT" -e "${{ inputs.edge_build_branch }}" -y
+
+      - name: Set GAC state variable if present
+        if: secrets.GAC_ACCESS_TOKEN != ''
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+          GAC_ACCESS_TOKEN: ${{ secrets.GAC_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform environment:drush \
+            "sset google_analytics_counter.access_token ${GAC_ACCESS_TOKEN}" \
+            -p "$PLATFORM_PROJECT" -e "${{ inputs.edge_build_branch }}"
+
+      - name: Reset QA account passwords
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform environment:drush password_qa_accounts -p "$PLATFORM_PROJECT" -e "${{ inputs.edge_build_branch }}"

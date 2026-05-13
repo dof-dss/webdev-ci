@@ -1,0 +1,290 @@
+name: Unity edge build
+
+on:
+  workflow_call:
+    inputs:
+      source_branch:
+        description: Source branch to build the edge branch from.
+        required: false
+        type: string
+        default: development
+      edge_build_branch:
+        description: Fixed edge branch to push for Platform.sh integration.
+        required: false
+        type: string
+        default: edge
+      php_version:
+        description: PHP version to use for composer and build steps.
+        required: false
+        type: string
+        default: '8.3'
+      node_version:
+        description: Node.js version to use for theme builds.
+        required: false
+        type: string
+        default: '18'
+      edge_build_dofdss_packages:
+        description: Composer package constraints to switch to edge/development branches.
+        required: false
+        type: string
+        default: 'dof-dss/nicsdru_origins_theme:dev-10.x-dev dof-dss/nicsdru_origins_modules:dev-10.x-dev'
+    secrets:
+      PLATFORM_CLI_TOKEN:
+        required: true
+      PLATFORM_PROJECT:
+        required: true
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+    working-directory: .
+
+concurrency:
+  group: unity-edge-build-${{ github.repository }}-${{ inputs.edge_build_branch }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_BRANCH: ${{ inputs.source_branch }}
+  EDGE_BUILD_BRANCH: ${{ inputs.edge_build_branch }}
+  PHP_VERSION: ${{ inputs.php_version }}
+  NODE_VERSION: ${{ inputs.node_version }}
+  EDGE_BUILD_DOFDSS_PACKAGES: ${{ inputs.edge_build_dofdss_packages }}
+  PROJECT_ROOT: ${{ github.workspace }}
+  PLATFORM_REGION: uk-1.platform.sh
+  PHP_INI_MEMORY_LIMIT: -1
+  PHP_INI_MAX_EXECUTION_TIME: 600
+  PHP_INI_MAX_INPUT_TIME: 600
+  COMPOSER_ALLOW_SUPERUSER: 1
+  CPPFLAGS: -DPNG_ARM_NEON_OPT=0
+  GIT_AUTHOR_NAME: GitHub Actions
+  GIT_COMMITTER_NAME: GitHub Actions
+  EMAIL: github-actions@localhost
+
+jobs:
+  unity-edge-build:
+    name: Build Unity edge branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.SOURCE_BRANCH }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: gd, mbstring, xml, intl, zip
+          ini-values: memory_limit=${{ env.PHP_INI_MEMORY_LIMIT }}, max_execution_time=${{ env.PHP_INI_MAX_EXECUTION_TIME }}, max_input_time=${{ env.PHP_INI_MAX_INPUT_TIME }}
+          coverage: none
+          tools: composer
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install OS packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libjpeg-dev make python3 g++ dh-autoreconf
+
+      - name: Keyscan SSH hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          ssh-keyscan -H "ssh.${PLATFORM_REGION}" >> ~/.ssh/known_hosts
+
+      - name: Configure git identity
+        if: env.SKIP_GIT_COMMANDS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email "${EMAIL}"
+          git config user.name "${GIT_AUTHOR_NAME}"
+
+      - name: Switch or create edge branch from latest source branch
+        if: env.SKIP_GIT_COMMANDS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${SOURCE_BRANCH}"
+
+          if git ls-remote --exit-code --heads origin "${EDGE_BUILD_BRANCH}" >/dev/null 2>&1; then
+            git checkout -B "${EDGE_BUILD_BRANCH}" "origin/${EDGE_BUILD_BRANCH}"
+            git merge -X theirs --no-edit "origin/${SOURCE_BRANCH}" || {
+              echo "Merge of origin/${SOURCE_BRANCH} into ${EDGE_BUILD_BRANCH} failed."
+              exit 1
+            }
+          else
+            git checkout -b "${EDGE_BUILD_BRANCH}" "origin/${SOURCE_BRANCH}"
+          fi
+
+      - name: Switch dof-dss packages to edge constraints
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f composer.json ]; then
+            echo "composer.json was not found in ${PWD}. Ensure the repository checkout step has run before Composer commands."
+            exit 1
+          fi
+
+          if [ -z "${EDGE_BUILD_DOFDSS_PACKAGES:-}" ]; then
+            echo "EDGE_BUILD_DOFDSS_PACKAGES is empty. Provide at least one Composer package constraint."
+            exit 1
+          fi
+
+          composer config --no-plugins allow-plugins.composer/installers true
+          composer require ${EDGE_BUILD_DOFDSS_PACKAGES} --no-interaction --no-progress
+
+      - name: Rebuild site themes
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./build-themes.sh
+          ./build-themes.sh --sites-dir "${PROJECT_ROOT}/project/sites"
+
+      - name: Commit composer and theme changes
+        if: env.SKIP_GIT_COMMANDS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add composer.json composer.lock
+          git add --all -- '*.css' ':!vendor' || true
+
+          if git diff --cached --quiet; then
+            echo "No Unity edge build changes to commit."
+          else
+            git commit -m "Nightly Unity edge build"
+          fi
+
+      - name: Push edge branch
+        if: env.SKIP_GIT_COMMANDS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push -f origin "${EDGE_BUILD_BRANCH}"
+
+  unity-sync-data:
+    name: Sync production data to Unity edge
+    runs-on: ubuntu-latest
+    needs: unity-edge-build
+    if: success()
+
+    steps:
+      - name: Checkout edge branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.EDGE_BUILD_BRANCH }}
+
+      - name: Install Platform.sh CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/platformsh/cli/main/installer.sh | bash
+          echo "${HOME}/.platformsh/bin" >> "${GITHUB_PATH}"
+
+      - name: Authenticate Platform.sh CLI
+        env:
+          PLATFORM_CLI_TOKEN: ${{ secrets.PLATFORM_CLI_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform auth:api-token-login --api-token "${PLATFORM_CLI_TOKEN}"
+
+      - name: Sync production data
+        id: sync-data
+        continue-on-error: true
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform sync data -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" -y
+        timeout-minutes: 20
+
+      - name: Backup data sync
+        if: steps.sync-data.outcome == 'failure'
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 300
+          platform sync data -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" -y
+        timeout-minutes: 30
+
+      - name: Run outstanding database updates
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for site in $(find "${PROJECT_ROOT}/project/sites" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^default$'); do
+            if platform drush "st -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" | grep -q "Drupal bootstrap : Successful"; then
+              platform drush "updb -l ${site} -y" -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" || true
+            fi
+          done
+        timeout-minutes: 20
+
+      - name: Turn off Fastly module
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for site in $(find "${PROJECT_ROOT}/project/sites" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^default$'); do
+            if platform drush "st -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" | grep -q "Drupal bootstrap : Successful"; then
+              if platform drush "pml --status=enabled -l ${site}" -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" | grep -q "Fastly (fastly)"; then
+                echo "***** Uninstall Fastly - ${site} *****"
+                platform drush "pmu fastly -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}"
+              fi
+            fi
+          done
+
+      - name: Clear cache before config import
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for site in $(find "${PROJECT_ROOT}/project/sites" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^default$'); do
+            if platform drush "st -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" | grep -q "Drupal bootstrap : Successful"; then
+              echo "***** Clear Cache - ${site} *****"
+              platform drush "cr -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}"
+            fi
+          done
+
+      - name: Refresh configuration and QA accounts
+        env:
+          PLATFORM_PROJECT: ${{ secrets.PLATFORM_PROJECT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for site in $(find "${PROJECT_ROOT}/project/sites" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^default$'); do
+            if platform drush "st -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}" | grep -q "Drupal bootstrap : Successful"; then
+              echo "***** Config Import - ${site} *****"
+              platform drush "cim -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}"
+              echo "***** Import blocks/taxonomies/menus - ${site} *****"
+              platform drush "import-all-if-installed safe -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}"
+              echo "***** Enable QA accounts - ${site} *****"
+              platform drush "bulk_update_qa_accounts enable -l ${site}" -y -p "${PLATFORM_PROJECT}" -e "${EDGE_BUILD_BRANCH}"
+            fi
+          done
