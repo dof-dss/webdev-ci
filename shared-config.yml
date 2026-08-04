@@ -164,6 +164,7 @@ jobs:
           name: Reset QA account passwords
           command: |
             platform environment:drush password_qa_accounts -e $EDGE_BUILD_BRANCH
+      - reconcile_solr_indexes
 
   coding_standards:
     shell: /bin/bash -euo pipefail
@@ -642,6 +643,7 @@ jobs:
                 platform drush "bulk_update_qa_accounts enable -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
               fi
             done
+      - reconcile_solr_indexes
 
   # THEMING repo jobs.
   theme_install:
@@ -709,6 +711,25 @@ jobs:
           command: npm run build
 
 commands:
+  reconcile_solr_indexes:
+    description: "Rebuild Search API Solr indexes when Drupal tracker and live document counts differ"
+    steps:
+      - run:
+          name: Reconcile Drupal tracker counts with live Solr indexes
+          shell: /bin/bash -euo pipefail
+          command: |
+            script_path="/tmp/reconcile-solr-indexes.sh"
+            script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
+
+            curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
+            chmod +x "${script_path}"
+
+            platform ssh \
+              --project "${PLATFORM_PROJECT}" \
+              --environment "${EDGE_BUILD_BRANCH}" \
+              -- bash -s < "${script_path}"
+          no_output_timeout: 30m
+
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
     parameters:
