@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
-# Compare Drupal's Search API tracker counts with the number of documents that
-# can actually be queried from Solr. Clear and fully rebuild only indexes whose
-# counts differ. Intended to run inside a deployed Platform.sh application.
+# Compare the live Solr version in a data-sync source environment with the
+# version used by each Search API Solr index in the target environment. Rebuild
+# only indexes whose target version differs from the source version.
 
 set -uo pipefail
 
+MODE="${1:-reconcile}"
 APP_ROOT="${PLATFORM_APP_DIR:-/app}"
-SITES_ROOT="${APP_ROOT}/project/sites"
+DRUPAL_ROOT="${DRUPAL_ROOT:-${APP_ROOT}/web}"
+SITES_ROOT="${SITES_ROOT:-}"
+SOURCE_SOLR_VERSION="${SOURCE_SOLR_VERSION:-}"
 INDEX_CHUNK_SIZE="${INDEX_CHUNK_SIZE:-500}"
 INDEX_BATCH_SIZE="${INDEX_BATCH_SIZE:-25}"
 CHUNK_PAUSE_SECONDS="${CHUNK_PAUSE_SECONDS:-5}"
@@ -16,7 +19,17 @@ SITE_PAUSE_SECONDS="${SITE_PAUSE_SECONDS:-20}"
 SOLR_READY_RETRIES="${SOLR_READY_RETRIES:-12}"
 SOLR_READY_DELAY_SECONDS="${SOLR_READY_DELAY_SECONDS:-10}"
 CLEAR_RETRIES="${CLEAR_RETRIES:-3}"
-VERIFY_RETRIES="${VERIFY_RETRIES:-6}"
+
+if [[ "${MODE}" != detect && "${MODE}" != reconcile ]]; then
+  echo "ERROR: Usage: $0 [detect|reconcile]" >&2
+  exit 1
+fi
+
+if [[ "${MODE}" == reconcile ]] &&
+  { [[ ! "${SOURCE_SOLR_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "${SOURCE_SOLR_VERSION}" == 0.0.0 ]]; }; then
+  echo "ERROR: SOURCE_SOLR_VERSION must be a detected semantic Solr version." >&2
+  exit 1
+fi
 
 if command -v drush >/dev/null 2>&1; then
   DRUSH=(drush)
@@ -27,22 +40,36 @@ else
   exit 1
 fi
 
-if [[ ! -d "${SITES_ROOT}" ]]; then
-  echo "ERROR: Site directory not found: ${SITES_ROOT}" >&2
+if [[ ! -d "${DRUPAL_ROOT}" ]]; then
+  echo "ERROR: Drupal root not found: ${DRUPAL_ROOT}" >&2
+  exit 1
+fi
+
+if [[ -z "${SITES_ROOT}" ]]; then
+  for sites_root_candidate in "${APP_ROOT}/project/sites" "${DRUPAL_ROOT}/sites"; do
+    if [[ -d "${sites_root_candidate}" ]] &&
+      find "${sites_root_candidate}" -mindepth 2 -maxdepth 2 -type f -name settings.php -print -quit | grep -q .; then
+      SITES_ROOT="${sites_root_candidate}"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${SITES_ROOT}" || ! -d "${SITES_ROOT}" ]]; then
+  echo "ERROR: Drupal sites directory was not found under ${APP_ROOT}/project/sites or ${DRUPAL_ROOT}/sites." >&2
   exit 1
 fi
 
 for setting in \
   INDEX_CHUNK_SIZE INDEX_BATCH_SIZE CHUNK_PAUSE_SECONDS INDEX_PAUSE_SECONDS \
-  SITE_PAUSE_SECONDS SOLR_READY_RETRIES SOLR_READY_DELAY_SECONDS CLEAR_RETRIES \
-  VERIFY_RETRIES; do
+  SITE_PAUSE_SECONDS SOLR_READY_RETRIES SOLR_READY_DELAY_SECONDS CLEAR_RETRIES; do
   if [[ ! "${!setting}" =~ ^[0-9]+$ ]]; then
     echo "ERROR: ${setting} must be a non-negative integer." >&2
     exit 1
   fi
 done
 
-if (( INDEX_CHUNK_SIZE == 0 || INDEX_BATCH_SIZE == 0 || SOLR_READY_RETRIES == 0 || CLEAR_RETRIES == 0 || VERIFY_RETRIES == 0 )); then
+if (( INDEX_CHUNK_SIZE == 0 || INDEX_BATCH_SIZE == 0 || SOLR_READY_RETRIES == 0 || CLEAR_RETRIES == 0 )); then
   echo "ERROR: Chunk sizes and retry counts must be greater than zero." >&2
   exit 1
 fi
@@ -57,6 +84,8 @@ if (( ${#SITES[@]} == 0 )); then
   exit 1
 fi
 
+echo "Using Drupal root ${DRUPAL_ROOT} and sites directory ${SITES_ROOT}."
+
 pause_for() {
   local seconds="$1"
   if (( seconds > 0 )); then
@@ -67,7 +96,7 @@ pause_for() {
 drush_for_site() {
   local site="$1"
   shift
-  "${DRUSH[@]}" --root="${APP_ROOT}/web" --uri="${site}" "$@"
+  "${DRUSH[@]}" --root="${DRUPAL_ROOT}" --uri="${site}" "$@"
 }
 
 discover_solr_indexes() {
@@ -83,7 +112,7 @@ discover_solr_indexes() {
   '
 }
 
-get_index_counts() {
+get_solr_version() {
   local site="$1"
   local index="$2"
 
@@ -94,14 +123,10 @@ get_index_counts() {
     if (!$index) {
       throw new \RuntimeException("Search API index was not found.");
     }
-
-    $tracker_count = $index->getTrackerInstance()->getIndexedItemsCount();
-    $query = $index->query();
-    $query->range(0, 0);
-    $query->setOption("search_api_bypass_access", TRUE);
-    $solr_count = $query->execute()->getResultCount();
-    printf("SOLR_COUNTS\t%d\t%d\n", $tracker_count, $solr_count);
-  ' | awk -F '\t' '$1 == "SOLR_COUNTS" { print $2 "\t" $3 }'
+    $backend = $index->getServerInstance()->getBackend();
+    $version = $backend->getSolrConnector()->getSolrVersion(TRUE);
+    printf("SOLR_VERSION\t%s\n", $version);
+  ' | awk -F '\t' '$1 == "SOLR_VERSION" { print $2 }'
 }
 
 get_remaining_items() {
@@ -173,9 +198,8 @@ clear_solr_index() {
     fi
     printf '%s\n' "${clear_output}"
 
-    # Search API can log a backend exception followed by a success message and
-    # still return zero, so inspect the output as well as the exit status.
-    if [[ "${clear_succeeded}" == true ]] && ! grep -qE '\[error\]|SearchApiSolrException|SolrCore is loading' <<< "${clear_output}"; then
+    if [[ "${clear_succeeded}" == true ]] &&
+      ! grep -qE 'SearchApiSolrException|SolrCore is loading|Solr HTTP error|Solr endpoint .*unreachable' <<< "${clear_output}"; then
       return 0
     fi
 
@@ -199,11 +223,9 @@ rebuild_solr_index() {
     if ! before=$(get_remaining_items "${site}" "${index}"); then
       return 1
     fi
-
     if (( before == 0 )); then
       return 0
     fi
-
     if ! wait_for_solr_index "${site}" "${index}"; then
       return 1
     fi
@@ -219,7 +241,6 @@ rebuild_solr_index() {
     if ! after=$(get_remaining_items "${site}" "${index}"); then
       return 1
     fi
-
     if (( after >= before )); then
       (( stalled_attempts++ ))
       if (( stalled_attempts >= 3 )); then
@@ -229,133 +250,96 @@ rebuild_solr_index() {
     else
       stalled_attempts=0
     fi
-
     if (( after > 0 )); then
       pause_for "${CHUNK_PAUSE_SECONDS}"
     fi
   done
 }
 
-verify_alignment() {
-  local site="$1"
-  local index="$2"
-  local attempt
-  local counts
-  local tracker_count
-  local solr_count
-
-  for (( attempt = 1; attempt <= VERIFY_RETRIES; attempt++ )); do
-    if counts=$(get_index_counts "${site}" "${index}"); then
-      IFS=$'\t' read -r tracker_count solr_count <<< "${counts}"
-      if [[ "${tracker_count}" =~ ^[0-9]+$ && "${solr_count}" =~ ^[0-9]+$ && "${tracker_count}" -eq "${solr_count}" ]]; then
-        echo "${site}/${index}: verified ${solr_count} documents in Solr."
-        return 0
-      fi
-    fi
-
-    if (( attempt < VERIFY_RETRIES )); then
-      echo "${site}/${index}: counts have not converged; waiting ${SOLR_READY_DELAY_SECONDS}s."
-      pause_for "${SOLR_READY_DELAY_SECONDS}"
-    fi
-  done
-
-  echo "ERROR: ${site}/${index}: tracker count ${tracker_count:-unknown} does not match Solr count ${solr_count:-unknown}." >&2
-  return 1
-}
-
+detected_versions=()
 failed_indexes=()
 rebuilt_indexes=()
-aligned_indexes=()
+unchanged_indexes=()
 skipped_sites=()
 
-echo "Checking Drupal tracker counts against live Solr counts across ${#SITES[@]} sites."
-
 for site in "${SITES[@]}"; do
-  echo
-  echo "===== ${site}: checking Solr indexes ====="
-
   if ! index_output=$(discover_solr_indexes "${site}" 2>&1); then
-    echo "NOTICE: ${site}: Drupal did not bootstrap; skipping."
+    echo "NOTICE: ${site}: Drupal did not bootstrap; skipping." >&2
     skipped_sites+=("${site}")
     continue
   fi
 
   mapfile -t solr_indexes < <(awk -F '\t' '$1 == "SOLR_INDEX" { print $2 }' <<< "${index_output}")
   if (( ${#solr_indexes[@]} == 0 )); then
-    echo "No enabled Solr indexes found; skipping ${site}."
-    skipped_sites+=("${site}")
     continue
   fi
 
-  mismatched_indexes=()
+  indexes_to_rebuild=()
   for index in "${solr_indexes[@]}"; do
-    if ! counts=$(get_index_counts "${site}" "${index}"); then
-      echo "ERROR: ${site}/${index}: could not query tracker and Solr counts." >&2
-      failed_indexes+=("${site}/${index} (count check)")
+    if ! target_version=$(get_solr_version "${site}" "${index}") ||
+      [[ ! "${target_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "${target_version}" == 0.0.0 ]]; then
+      echo "ERROR: ${site}/${index}: could not detect a live Solr version." >&2
+      failed_indexes+=("${site}/${index} (version detection)")
       continue
     fi
 
-    IFS=$'\t' read -r tracker_count solr_count <<< "${counts}"
-    if [[ ! "${tracker_count}" =~ ^[0-9]+$ || ! "${solr_count}" =~ ^[0-9]+$ ]]; then
-      echo "ERROR: ${site}/${index}: invalid counts: tracker=${tracker_count:-unknown}, Solr=${solr_count:-unknown}." >&2
-      failed_indexes+=("${site}/${index} (invalid counts)")
-      continue
-    fi
-
-    if (( tracker_count == solr_count )); then
-      echo "${site}/${index}: aligned at ${solr_count} documents."
-      aligned_indexes+=("${site}/${index}")
+    if [[ "${MODE}" == detect ]]; then
+      detected_versions+=("${target_version}")
+    elif [[ "${target_version}" == "${SOURCE_SOLR_VERSION}" ]]; then
+      echo "${site}/${index}: Solr ${target_version} matches the source environment; no rebuild needed."
+      unchanged_indexes+=("${site}/${index}")
     else
-      echo "${site}/${index}: mismatch detected (tracker=${tracker_count}, Solr=${solr_count}); scheduling a full rebuild."
-      mismatched_indexes+=("${index}")
+      echo "${site}/${index}: source Solr=${SOURCE_SOLR_VERSION}, target Solr=${target_version}; scheduling rebuild."
+      indexes_to_rebuild+=("${index}")
     fi
   done
 
-  if (( ${#mismatched_indexes[@]} == 0 )); then
+  if [[ "${MODE}" == detect ]] || (( ${#indexes_to_rebuild[@]} == 0 )); then
     continue
   fi
 
   if ! drush_for_site "${site}" --yes cache:rebuild; then
-    echo "ERROR: ${site}: cache rebuild failed; mismatched indexes were not rebuilt." >&2
-    for index in "${mismatched_indexes[@]}"; do
+    echo "ERROR: ${site}: cache rebuild failed." >&2
+    for index in "${indexes_to_rebuild[@]}"; do
       failed_indexes+=("${site}/${index} (cache rebuild)")
     done
     continue
   fi
 
-  for index in "${mismatched_indexes[@]}"; do
-    echo "===== ${site}/${index}: clearing mismatched index ====="
-    if ! clear_solr_index "${site}" "${index}"; then
-      echo "ERROR: ${site}/${index}: clear failed." >&2
-      failed_indexes+=("${site}/${index} (clear)")
-      pause_for "${INDEX_PAUSE_SECONDS}"
-      continue
-    fi
-
-    echo "===== ${site}/${index}: rebuilding full index ====="
-    if ! rebuild_solr_index "${site}" "${index}"; then
+  for index in "${indexes_to_rebuild[@]}"; do
+    echo "===== ${site}/${index}: rebuilding for Solr version change ====="
+    if ! clear_solr_index "${site}" "${index}" || ! rebuild_solr_index "${site}" "${index}"; then
       echo "ERROR: ${site}/${index}: rebuild failed." >&2
       failed_indexes+=("${site}/${index} (rebuild)")
-      pause_for "${INDEX_PAUSE_SECONDS}"
-      continue
-    fi
-
-    if verify_alignment "${site}" "${index}"; then
+    elif [[ "$(get_remaining_items "${site}" "${index}")" == 0 ]]; then
       rebuilt_indexes+=("${site}/${index}")
     else
+      echo "ERROR: ${site}/${index}: tracker items remain after rebuild." >&2
       failed_indexes+=("${site}/${index} (verification)")
     fi
-
     pause_for "${INDEX_PAUSE_SECONDS}"
   done
 
   pause_for "${SITE_PAUSE_SECONDS}"
 done
 
-echo
-echo "Solr reconciliation complete: ${#aligned_indexes[@]} already aligned, ${#rebuilt_indexes[@]} rebuilt, ${#skipped_sites[@]} sites skipped, ${#failed_indexes[@]} failures."
-
 if (( ${#failed_indexes[@]} > 0 )); then
   printf 'Failed: %s\n' "${failed_indexes[*]}" >&2
   exit 1
 fi
+
+if [[ "${MODE}" == detect ]]; then
+  if (( ${#detected_versions[@]} == 0 )); then
+    echo "ERROR: No live Solr versions were detected in the source environment." >&2
+    exit 1
+  fi
+  mapfile -t unique_versions < <(printf '%s\n' "${detected_versions[@]}" | sort -u)
+  if (( ${#unique_versions[@]} != 1 )); then
+    echo "ERROR: Expected one Solr version across the source environment; found: ${unique_versions[*]:-none}." >&2
+    exit 1
+  fi
+  printf 'DETECTED_SOLR_VERSION\t%s\n' "${unique_versions[0]}"
+  exit 0
+fi
+
+echo "Solr version reconciliation complete: ${#unchanged_indexes[@]} unchanged, ${#rebuilt_indexes[@]} rebuilt, ${#skipped_sites[@]} sites skipped."

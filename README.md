@@ -60,6 +60,31 @@ jobs:
 - YAML anchors can't be preprocessed with pipeline parameters (yet), so you'll see these re-declared to prioritise parameter usage over lack of repetition.
 - There's a preprocess/setup step involved now where a continuation orb will take the central config file, and preprocess it into a final YAML file which is then executed in the usual workflow steps.
 
+## Edge Solr version reconciliation
+
+The shared edge-finalisation jobs run `scripts/reconcile-solr-indexes.sh` after
+the data sync. The CircleCI command detects the edge environment's parent,
+reads the live Solr version from that source environment, and passes it to the
+edge environment. An edge Search API index is cleared and rebuilt only when its
+live Solr version differs from the source version.
+
+The script supports both repository layouts used by the consuming projects:
+
+- `project/sites` for Unity and Corp Lite multisite projects.
+- `web/sites` for DEPT, nidirect, and other standard Drupal projects.
+
+The sites directory can be overridden with `SITES_ROOT`, and the Drupal root
+with `DRUPAL_ROOT`, when a project uses another layout. Versions are detected
+from each environment's live Search API Solr connector; no project-specific
+Solr version is hard-coded in the shared configuration. If the versions match,
+the command does not inspect counts or mutate the index.
+
+Run the focused regression coverage with:
+
+```bash
+bash scripts/tests/reconcile-solr-indexes.sh
+```
+
 ## Contribution
 
 > Contributors to repositories hosted in dof-dss are expected to follow the Contributor Covenant Code of Conduct, and those working within Government are also expected to follow the Northern Civil Service Code of Ethics and Civil Service Code. For details see https://github.com/dof-dss/contributor-code-of-conduct

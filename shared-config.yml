@@ -712,22 +712,47 @@ jobs:
 
 commands:
   reconcile_solr_indexes:
-    description: "Rebuild Search API Solr indexes when Drupal tracker and live document counts differ"
+    description: "Rebuild Search API Solr indexes when source and target environments use different Solr versions"
     steps:
       - run:
-          name: Reconcile Drupal tracker counts with live Solr indexes
+          name: Rebuild edge indexes when the live Solr version differs from the source
           shell: /bin/bash -euo pipefail
           command: |
             script_path="/tmp/reconcile-solr-indexes.sh"
             script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
+            script_sha256="9f10b5d4bc94e2b8498104c4a7643f21d7cbb54278565de9f9d6999ccd4a51fe"
 
             curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
+            printf '%s  %s\n' "${script_sha256}" "${script_path}" | sha256sum --check --status || {
+              echo "ERROR: Downloaded Solr reconciliation script does not match the shared CI config." >&2
+              exit 1
+            }
             chmod +x "${script_path}"
+
+            source_environment=$(platform environment:info parent \
+              --project "${PLATFORM_PROJECT}" \
+              --environment "${EDGE_BUILD_BRANCH}" \
+              --format plain)
+            if [[ -z "${source_environment}" || "${source_environment}" == "-" ]]; then
+              echo "ERROR: Could not determine the data-sync source environment for ${EDGE_BUILD_BRANCH}." >&2
+              exit 1
+            fi
+
+            source_output=$(platform ssh \
+              --project "${PLATFORM_PROJECT}" \
+              --environment "${source_environment}" \
+              -- bash -s -- detect < "${script_path}")
+            printf '%s\n' "${source_output}"
+            source_solr_version=$(awk -F '\t' '$1 == "DETECTED_SOLR_VERSION" { print $2 }' <<< "${source_output}")
+            if [[ ! "${source_solr_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "ERROR: Could not detect a single Solr version in source environment ${source_environment}." >&2
+              exit 1
+            fi
 
             platform ssh \
               --project "${PLATFORM_PROJECT}" \
               --environment "${EDGE_BUILD_BRANCH}" \
-              -- bash -s < "${script_path}"
+              -- env SOURCE_SOLR_VERSION="${source_solr_version}" bash -s -- reconcile < "${script_path}"
           no_output_timeout: 30m
 
   checkout_code:
