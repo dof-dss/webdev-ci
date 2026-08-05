@@ -712,25 +712,12 @@ jobs:
 
 commands:
   reconcile_solr_indexes:
-    description: "Rebuild Search API Solr indexes when source and target environments use different Solr versions"
+    description: "Rebuild Search API Solr indexes when source and target environments declare different Solr versions"
     steps:
       - run:
-          name: Rebuild edge indexes when the live Solr version differs from the source
+          name: Rebuild edge indexes when the declared Solr version differs from the source
           shell: /bin/bash -euo pipefail
           command: |
-            script_path="/tmp/reconcile-solr-indexes.sh"
-            script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
-            script_sha256="7ca35b8de3479bd95fe1a66b48243665789237ab150d557eec6c36331d2f2500"
-
-            # Pin the helper to the exact content reviewed with this shared
-            # configuration. This prevents main moving between the two fetches.
-            curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
-            printf '%s  %s\n' "${script_sha256}" "${script_path}" | sha256sum --check --status || {
-              echo "ERROR: Downloaded Solr reconciliation script does not match the shared CI config." >&2
-              exit 1
-            }
-            chmod +x "${script_path}"
-
             # platform sync data uses the edge environment's parent as its
             # source. Detect that parent rather than assuming a branch name.
             source_environment=$(platform environment:info parent \
@@ -742,25 +729,63 @@ commands:
               exit 1
             fi
 
-            # Detection is read-only and emits a tab-delimited marker amongst
-            # normal Drush output for reliable extraction below.
-            source_output=$(platform ssh \
-              --project "${PLATFORM_PROJECT}" \
-              --environment "${source_environment}" \
-              -- bash -s -- detect < "${script_path}")
-            printf '%s\n' "${source_output}"
-            source_solr_version=$(awk -F '\t' '$1 == "DETECTED_SOLR_VERSION" { print $2 }' <<< "${source_output}")
-            if [[ ! "${source_solr_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "ERROR: Could not detect a single Solr version in source environment ${source_environment}." >&2
+            # Read the service declarations deployed to each environment. The
+            # command returns an empty value when an environment has no Solr
+            # service and rejects ambiguous projects with multiple versions.
+            declared_solr_version() {
+              local environment="$1"
+              local service_types
+              local -a versions
+
+              if ! service_types=$(platform services \
+                --project "${PLATFORM_PROJECT}" \
+                --environment "${environment}" \
+                --columns type \
+                --format tsv \
+                --no-header); then
+                echo "ERROR: Could not read services for environment ${environment}." >&2
+                return 1
+              fi
+              mapfile -t versions < <(
+                awk -F '\t' '$1 ~ /^solr:[0-9]+([.][0-9]+)*$/ { sub(/^solr:/, "", $1); print $1 }' <<< "${service_types}" | sort -u
+              )
+
+              if (( ${#versions[@]} > 1 )); then
+                echo "ERROR: Environment ${environment} declares multiple Solr versions: ${versions[*]}." >&2
+                return 1
+              fi
+              printf '%s\n' "${versions[0]:-}"
+            }
+
+            if ! source_solr_version=$(declared_solr_version "${source_environment}"); then
+              exit 1
+            fi
+            if ! target_solr_version=$(declared_solr_version "${EDGE_BUILD_BRANCH}"); then
               exit 1
             fi
 
-            # Reconciliation runs only in the edge environment. The helper
-            # leaves every index untouched when its live version matches.
+            if [[ -z "${target_solr_version}" ]]; then
+              echo "No Solr service is declared for ${EDGE_BUILD_BRANCH}; skipping index rebuild."
+              exit 0
+            fi
+            if [[ "${source_solr_version}" == "${target_solr_version}" ]]; then
+              echo "Source and target both declare Solr ${target_solr_version}; no index rebuild needed."
+              exit 0
+            fi
+
+            echo "Declared Solr version changed: source=${source_solr_version:-none}, target=${target_solr_version}."
+
+            # Fetch the current helper from main only when a rebuild is needed.
+            # This repository intentionally follows the latest HEAD version.
+            script_path="/tmp/reconcile-solr-indexes.sh"
+            script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
+            curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
+            chmod +x "${script_path}"
+
             platform ssh \
               --project "${PLATFORM_PROJECT}" \
               --environment "${EDGE_BUILD_BRANCH}" \
-              -- env SOURCE_SOLR_VERSION="${source_solr_version}" bash -s -- reconcile < "${script_path}"
+              -- bash -s < "${script_path}"
           no_output_timeout: 30m
 
   checkout_code:
