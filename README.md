@@ -60,6 +60,98 @@ jobs:
 - YAML anchors can't be preprocessed with pipeline parameters (yet), so you'll see these re-declared to prioritise parameter usage over lack of repetition.
 - There's a preprocess/setup step involved now where a continuation orb will take the central config file, and preprocess it into a final YAML file which is then executed in the usual workflow steps.
 
+## Edge Solr version reconciliation
+
+The shared edge-finalisation jobs run `scripts/reconcile-solr-indexes.sh` after
+the data sync. The CircleCI command detects the edge environment's parent,
+reads the Solr service types declared for the source and edge environments, and
+only runs the helper when those declared versions differ.
+
+This is needed because `platform sync data` copies Drupal's database and files,
+but the source and edge environments can have different Solr service versions.
+The copied database includes Search API tracker state, while the edge Solr index
+remains a separate service. When versions differ, rebuilding makes the tracker
+and index reflect work performed against the edge service. Tracker and document
+counts are deliberately not used: Search API processors can reject documents
+while still marking them processed, so unequal counts are not by themselves
+evidence of a broken index.
+
+### Execution flow
+
+1. CircleCI asks Platform.sh for the edge environment's parent—the same
+   environment used as the data-sync source.
+2. It uses `platform services` to read the service types deployed to the source
+   and edge environments. DDEV configuration is not used for this production
+   decision.
+3. If the edge declares no Solr service, or both environments declare the same
+   Solr version, the command exits successfully without bootstrapping Drupal.
+4. If the edge declares a different Solr version, CircleCI downloads the latest
+   helper from `webdev-ci/main` and runs it only in the edge environment.
+5. The helper discovers enabled Search API Solr indexes. Each affected site
+   receives one Drupal cache rebuild followed by a clear and chunked rebuild.
+   Sites without an enabled Solr index are logged and skipped.
+
+If source and edge intentionally remain on different Solr versions, the edge
+indexes are rebuilt after every data sync. This is intentional: each sync
+refreshes Drupal's database and tracker state from that differently versioned
+source environment.
+
+The command fails rather than guessing if the source environment cannot be
+identified, an environment declares multiple Solr service versions, an affected
+site cannot reach Solr, clearing fails, or indexing stops making progress.
+
+The script supports both repository layouts used by the consuming projects:
+
+- `project/sites` for Unity and Corp Lite multisite projects.
+- `web/sites` for DEPT, nidirect, and other standard Drupal projects.
+
+The sites directory can be overridden with `SITES_ROOT`, and the Drupal root
+with `DRUPAL_ROOT`, when a project uses another layout. No project-specific Solr
+version is hard-coded in the shared configuration.
+
+### Local debugging
+
+The helper is rebuild-only because CircleCI makes the version decision before
+invoking it. Running it directly in DDEV therefore clears and rebuilds every
+enabled local Search API Solr index. Use a disposable local index:
+
+```bash
+ddev exec env \
+  PLATFORM_APP_DIR=/var/www/html \
+  CHUNK_PAUSE_SECONDS=0 \
+  INDEX_PAUSE_SECONDS=0 \
+  SITE_PAUSE_SECONDS=0 \
+  SOLR_READY_DELAY_SECONDS=0 \
+  bash -s \
+  < /path/to/webdev-ci/scripts/reconcile-solr-indexes.sh
+```
+
+Use `bash -x -s` instead of `bash -s` to trace commands during local debugging.
+There is no dry-run mode in the helper. To inspect the declared Upsun versions
+without rebuilding, use `platform services --columns type` for the source and
+edge environments.
+
+### Tuning
+
+The defaults are intended to reduce sustained load on shared environments:
+
+- `INDEX_CHUNK_SIZE=500` and `INDEX_BATCH_SIZE=25` bound each indexing call.
+- `CHUNK_PAUSE_SECONDS=5`, `INDEX_PAUSE_SECONDS=10`, and
+  `SITE_PAUSE_SECONDS=20` throttle work between batches, indexes, and sites.
+- `SOLR_READY_RETRIES=12`, `SOLR_READY_DELAY_SECONDS=10`, and
+  `CLEAR_RETRIES=3` allow a temporarily loading core to become available.
+
+These values can be overridden as environment variables. Pause values may be
+zero; chunk sizes and retry counts must remain greater than zero.
+
+### Tests
+
+Run the focused regression coverage with:
+
+```bash
+bash scripts/tests/reconcile-solr-indexes.sh
+```
+
 ## Contribution
 
 > Contributors to repositories hosted in dof-dss are expected to follow the Contributor Covenant Code of Conduct, and those working within Government are also expected to follow the Northern Civil Service Code of Ethics and Civil Service Code. For details see https://github.com/dof-dss/contributor-code-of-conduct
