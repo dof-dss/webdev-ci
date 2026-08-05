@@ -720,8 +720,10 @@ commands:
           command: |
             script_path="/tmp/reconcile-solr-indexes.sh"
             script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
-            script_sha256="9f10b5d4bc94e2b8498104c4a7643f21d7cbb54278565de9f9d6999ccd4a51fe"
+            script_sha256="7ca35b8de3479bd95fe1a66b48243665789237ab150d557eec6c36331d2f2500"
 
+            # Pin the helper to the exact content reviewed with this shared
+            # configuration. This prevents main moving between the two fetches.
             curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
             printf '%s  %s\n' "${script_sha256}" "${script_path}" | sha256sum --check --status || {
               echo "ERROR: Downloaded Solr reconciliation script does not match the shared CI config." >&2
@@ -729,6 +731,8 @@ commands:
             }
             chmod +x "${script_path}"
 
+            # platform sync data uses the edge environment's parent as its
+            # source. Detect that parent rather than assuming a branch name.
             source_environment=$(platform environment:info parent \
               --project "${PLATFORM_PROJECT}" \
               --environment "${EDGE_BUILD_BRANCH}" \
@@ -738,6 +742,8 @@ commands:
               exit 1
             fi
 
+            # Detection is read-only and emits a tab-delimited marker amongst
+            # normal Drush output for reliable extraction below.
             source_output=$(platform ssh \
               --project "${PLATFORM_PROJECT}" \
               --environment "${source_environment}" \
@@ -749,6 +755,8 @@ commands:
               exit 1
             fi
 
+            # Reconciliation runs only in the edge environment. The helper
+            # leaves every index untouched when its live version matches.
             platform ssh \
               --project "${PLATFORM_PROJECT}" \
               --environment "${EDGE_BUILD_BRANCH}" \

@@ -1,8 +1,41 @@
 #!/usr/bin/env bash
 
-# Compare the live Solr version in a data-sync source environment with the
-# version used by each Search API Solr index in the target environment. Rebuild
-# only indexes whose target version differs from the source version.
+# Reconcile Search API Solr indexes after copying Drupal data into an edge
+# environment whose Solr service may run a different version.
+#
+# Why this exists
+# ---------------
+# `platform sync data` copies Drupal's database and files, but it does not make
+# the source and target Solr services the same version. The copied database
+# includes Search API tracker state, while the edge Solr index remains a
+# separate service. When versions differ, clearing and rebuilding makes the
+# target tracker and index agree on work performed against the target service.
+# Tracker and document counts are not used as the decision boundary because
+# processors can legitimately make those counts differ.
+#
+# Modes
+# -----
+#   detect
+#     Read every enabled Search API Solr index and emit one machine-readable
+#     `DETECTED_SOLR_VERSION<TAB>x.y.z` line. This mode never clears or indexes.
+#     It fails if no version, version 0.0.0, or multiple versions are detected.
+#
+#   reconcile (default)
+#     Compare each target index's detected live version with the required
+#     SOURCE_SOLR_VERSION environment variable. Matching indexes are untouched;
+#     differing indexes are cleared and fully rebuilt in bounded chunks.
+#
+# Project layouts and overrides
+# -----------------------------
+# The script discovers Unity/Corp Lite sites under project/sites and standard
+# Drupal projects under web/sites. PLATFORM_APP_DIR defaults to /app, while
+# DRUPAL_ROOT and SITES_ROOT can override non-standard deployments. Chunk sizes,
+# pauses, readiness retries, and clear retries can also be overridden using the
+# variables declared below.
+#
+# The CircleCI command runs `detect` in the data-sync source environment, then
+# passes its result to `reconcile` in the edge environment. The script can also
+# be piped into a DDEV container for local diagnostics; see README.md.
 
 set -uo pipefail
 
@@ -102,6 +135,9 @@ drush_for_site() {
 discover_solr_indexes() {
   local site="$1"
 
+  # Restrict work to enabled Search API indexes backed by Search API Solr.
+  # The tab-prefixed record makes the useful result distinguishable from any
+  # Drupal/Drush informational output.
   drush_for_site "${site}" php:eval '
     foreach (\Drupal::entityTypeManager()->getStorage("search_api_index")->loadMultiple() as $index) {
       $server = $index->getServerInstanceIfAvailable();
@@ -116,6 +152,8 @@ get_solr_version() {
   local site="$1"
   local index="$2"
 
+  # Force live connector auto-detection. Without TRUE, a configured version
+  # override could hide the actual Solr service version being used.
   RECONCILE_INDEX_ID="${index}" drush_for_site "${site}" php:eval '
     $index = \Drupal::entityTypeManager()
       ->getStorage("search_api_index")
@@ -198,6 +236,9 @@ clear_solr_index() {
     fi
     printf '%s\n' "${clear_output}"
 
+    # Some Drupal hooks emit unrelated errors (for example, a missing Fastly
+    # service ID) even when Search API clears Solr successfully. Treat only a
+    # failed command or a known Solr-specific error as a failed clear.
     if [[ "${clear_succeeded}" == true ]] &&
       ! grep -qE 'SearchApiSolrException|SolrCore is loading|Solr HTTP error|Solr endpoint .*unreachable' <<< "${clear_output}"; then
       return 0
@@ -219,6 +260,8 @@ rebuild_solr_index() {
   local after
   local stalled_attempts=0
 
+  # Process a bounded number of items per Drush call to avoid one long-running
+  # remote command. Abort if three consecutive calls make no tracker progress.
   while true; do
     if ! before=$(get_remaining_items "${site}" "${index}"); then
       return 1
@@ -298,6 +341,7 @@ for site in "${SITES[@]}"; do
     continue
   fi
 
+  # Rebuild Drupal's caches once per affected site before mutating its indexes.
   if ! drush_for_site "${site}" --yes cache:rebuild; then
     echo "ERROR: ${site}: cache rebuild failed." >&2
     for index in "${indexes_to_rebuild[@]}"; do
@@ -333,6 +377,8 @@ if [[ "${MODE}" == detect ]]; then
     echo "ERROR: No live Solr versions were detected in the source environment." >&2
     exit 1
   fi
+  # A single source version is required because CircleCI passes one comparison
+  # value to the target environment. Refuse an ambiguous mixed-version source.
   mapfile -t unique_versions < <(printf '%s\n' "${detected_versions[@]}" | sort -u)
   if (( ${#unique_versions[@]} != 1 )); then
     echo "ERROR: Expected one Solr version across the source environment; found: ${unique_versions[*]:-none}." >&2
