@@ -6,7 +6,9 @@
 # target Upsun environments before invoking this helper. It does not invoke the
 # script when the target has no Solr service or when the declared versions
 # match. Keeping that decision in shared-config.yml means this script only needs
-# to perform one job: safely rebuild the target indexes after a version change.
+# to perform one job: safely reconcile the target indexes after a version
+# change. The default mode clears and rebuilds indexes; resume mode continues
+# tracker work without clearing already indexed documents.
 #
 # Sites without an enabled Search API Solr index are logged and skipped. This
 # supports multisite projects where only some sites use search as well as
@@ -16,22 +18,28 @@
 # The script discovers Unity/Corp Lite sites under project/sites and standard
 # Drupal projects under web/sites. PLATFORM_APP_DIR defaults to /app, while
 # DRUPAL_ROOT and SITES_ROOT can override non-standard deployments. Chunk sizes,
-# pauses, readiness retries, and clear retries can be overridden using the
-# variables declared below.
+# pauses, readiness retries, and operation retries can be overridden using the
+# variables declared below. Exact site and index filters make the same helper
+# suitable for targeted recovery after an interrupted overnight build.
 
 set -uo pipefail
 
 APP_ROOT="${PLATFORM_APP_DIR:-/app}"
 DRUPAL_ROOT="${DRUPAL_ROOT:-${APP_ROOT}/web}"
 SITES_ROOT="${SITES_ROOT:-}"
-INDEX_CHUNK_SIZE="${INDEX_CHUNK_SIZE:-500}"
-INDEX_BATCH_SIZE="${INDEX_BATCH_SIZE:-25}"
-CHUNK_PAUSE_SECONDS="${CHUNK_PAUSE_SECONDS:-5}"
-INDEX_PAUSE_SECONDS="${INDEX_PAUSE_SECONDS:-10}"
-SITE_PAUSE_SECONDS="${SITE_PAUSE_SECONDS:-20}"
+INDEX_CHUNK_SIZE="${INDEX_CHUNK_SIZE:-100}"
+INDEX_BATCH_SIZE="${INDEX_BATCH_SIZE:-5}"
+CHUNK_PAUSE_SECONDS="${CHUNK_PAUSE_SECONDS:-15}"
+INDEX_PAUSE_SECONDS="${INDEX_PAUSE_SECONDS:-30}"
+SITE_PAUSE_SECONDS="${SITE_PAUSE_SECONDS:-45}"
 SOLR_READY_RETRIES="${SOLR_READY_RETRIES:-12}"
-SOLR_READY_DELAY_SECONDS="${SOLR_READY_DELAY_SECONDS:-10}"
-CLEAR_RETRIES="${CLEAR_RETRIES:-3}"
+SOLR_READY_DELAY_SECONDS="${SOLR_READY_DELAY_SECONDS:-20}"
+CLEAR_RETRIES="${CLEAR_RETRIES:-5}"
+INDEX_RETRIES="${INDEX_RETRIES:-5}"
+INDEX_RETRY_DELAY_SECONDS="${INDEX_RETRY_DELAY_SECONDS:-60}"
+RECONCILE_MODE="${RECONCILE_MODE:-rebuild}"
+SITE_FILTER="${SITE_FILTER:-}"
+INDEX_FILTER="${INDEX_FILTER:-}"
 
 if command -v drush >/dev/null 2>&1; then
   DRUSH=(drush)
@@ -64,15 +72,21 @@ fi
 
 for setting in \
   INDEX_CHUNK_SIZE INDEX_BATCH_SIZE CHUNK_PAUSE_SECONDS INDEX_PAUSE_SECONDS \
-  SITE_PAUSE_SECONDS SOLR_READY_RETRIES SOLR_READY_DELAY_SECONDS CLEAR_RETRIES; do
+  SITE_PAUSE_SECONDS SOLR_READY_RETRIES SOLR_READY_DELAY_SECONDS CLEAR_RETRIES \
+  INDEX_RETRIES INDEX_RETRY_DELAY_SECONDS; do
   if [[ ! "${!setting}" =~ ^[0-9]+$ ]]; then
     echo "ERROR: ${setting} must be a non-negative integer." >&2
     exit 1
   fi
 done
 
-if (( INDEX_CHUNK_SIZE == 0 || INDEX_BATCH_SIZE == 0 || SOLR_READY_RETRIES == 0 || CLEAR_RETRIES == 0 )); then
+if (( INDEX_CHUNK_SIZE == 0 || INDEX_BATCH_SIZE == 0 || SOLR_READY_RETRIES == 0 || CLEAR_RETRIES == 0 || INDEX_RETRIES == 0 )); then
   echo "ERROR: Chunk sizes and retry counts must be greater than zero." >&2
+  exit 1
+fi
+
+if [[ "${RECONCILE_MODE}" != rebuild && "${RECONCILE_MODE}" != resume ]]; then
+  echo "ERROR: RECONCILE_MODE must be either rebuild or resume." >&2
   exit 1
 fi
 
@@ -86,7 +100,22 @@ if (( ${#SITES[@]} == 0 )); then
   exit 1
 fi
 
-echo "Using Drupal root ${DRUPAL_ROOT} and sites directory ${SITES_ROOT}."
+if [[ -n "${SITE_FILTER}" ]]; then
+  site_found=false
+  for site in "${SITES[@]}"; do
+    if [[ "${site}" == "${SITE_FILTER}" ]]; then
+      SITES=("${site}")
+      site_found=true
+      break
+    fi
+  done
+  if [[ "${site_found}" != true ]]; then
+    echo "ERROR: Site filter did not match a discovered site: ${SITE_FILTER}" >&2
+    exit 1
+  fi
+fi
+
+echo "Using Drupal root ${DRUPAL_ROOT} and sites directory ${SITES_ROOT} in ${RECONCILE_MODE} mode."
 
 pause_for() {
   local seconds="$1"
@@ -206,9 +235,14 @@ rebuild_solr_index() {
   local index="$2"
   local before
   local after
-  local stalled_attempts=0
+  local failed_attempts=0
+  local index_output
+  local index_succeeded
+  local transient_failure
+  local transient_failure_pattern='SearchApiSolrException|SolrCore is loading|Solr HTTP error|Solr endpoint .*unreachable|Operation timed out|pending server tasks could not be executed'
 
-  # Use bounded Drush calls and abort after three calls without tracker progress.
+  # Use bounded Drush calls and retry transient Solr failures without clearing
+  # partial progress. Deterministic non-Solr failures still fail immediately.
   while true; do
     if ! before=$(get_remaining_items "${site}" "${index}"); then
       return 1
@@ -221,35 +255,64 @@ rebuild_solr_index() {
     fi
 
     echo "${site}/${index}: ${before} items remaining; processing up to ${INDEX_CHUNK_SIZE}."
-    if ! drush_for_site "${site}" search-api:index \
+    index_succeeded=true
+    if ! index_output=$(drush_for_site "${site}" search-api:index \
       --limit="${INDEX_CHUNK_SIZE}" \
       --batch-size="${INDEX_BATCH_SIZE}" \
-      "${index}"; then
+      "${index}" 2>&1); then
+      index_succeeded=false
+    fi
+    printf '%s\n' "${index_output}"
+
+    transient_failure=false
+    if grep -qE "${transient_failure_pattern}" <<< "${index_output}"; then
+      transient_failure=true
+    fi
+
+    if [[ "${index_succeeded}" != true && "${transient_failure}" != true ]]; then
+      echo "ERROR: ${site}/${index}: indexing failed with a non-Solr error." >&2
       return 1
     fi
 
     if ! after=$(get_remaining_items "${site}" "${index}"); then
       return 1
     fi
-    if (( after >= before )); then
-      (( stalled_attempts++ ))
-      if (( stalled_attempts >= 3 )); then
-        echo "ERROR: ${site}/${index}: indexing made no progress after ${stalled_attempts} attempts." >&2
-        return 1
+
+    if (( after < before )); then
+      failed_attempts=0
+      if [[ "${transient_failure}" == true ]]; then
+        echo "NOTICE: ${site}/${index}: Solr timed out after making progress (${before} -> ${after}); cooling down before resuming." >&2
+        pause_for "${INDEX_RETRY_DELAY_SECONDS}"
+      elif (( after > 0 )); then
+        pause_for "${CHUNK_PAUSE_SECONDS}"
       fi
+      continue
+    fi
+
+    (( failed_attempts++ ))
+    if (( failed_attempts >= INDEX_RETRIES )); then
+      if [[ "${transient_failure}" == true ]]; then
+        echo "ERROR: ${site}/${index}: Solr remained unavailable after ${failed_attempts} indexing attempts." >&2
+      else
+        echo "ERROR: ${site}/${index}: indexing made no progress after ${failed_attempts} attempts." >&2
+      fi
+      return 1
+    fi
+
+    if [[ "${transient_failure}" == true ]]; then
+      echo "NOTICE: ${site}/${index}: transient Solr failure with no tracker progress (attempt ${failed_attempts}/${INDEX_RETRIES}); waiting ${INDEX_RETRY_DELAY_SECONDS}s." >&2
     else
-      stalled_attempts=0
+      echo "NOTICE: ${site}/${index}: no tracker progress (attempt ${failed_attempts}/${INDEX_RETRIES}); waiting ${INDEX_RETRY_DELAY_SECONDS}s." >&2
     fi
-    if (( after > 0 )); then
-      pause_for "${CHUNK_PAUSE_SECONDS}"
-    fi
+    pause_for "${INDEX_RETRY_DELAY_SECONDS}"
   done
 }
 
 failed_indexes=()
-rebuilt_indexes=()
+completed_indexes=()
 skipped_sites=()
 sites_without_solr=()
+matched_index_filter=false
 
 for site in "${SITES[@]}"; do
   if ! index_output=$(discover_solr_indexes "${site}" 2>&1); then
@@ -265,6 +328,21 @@ for site in "${SITES[@]}"; do
     continue
   fi
 
+  if [[ -n "${INDEX_FILTER}" ]]; then
+    filtered_indexes=()
+    for index in "${solr_indexes[@]}"; do
+      if [[ "${index}" == "${INDEX_FILTER}" ]]; then
+        filtered_indexes+=("${index}")
+        matched_index_filter=true
+      fi
+    done
+    solr_indexes=("${filtered_indexes[@]}")
+    if (( ${#solr_indexes[@]} == 0 )); then
+      echo "${site}: enabled Solr indexes do not match filter ${INDEX_FILTER}; skipping."
+      continue
+    fi
+  fi
+
   # Rebuild Drupal's caches once per affected site before mutating its indexes.
   if ! drush_for_site "${site}" --yes cache:rebuild; then
     echo "ERROR: ${site}: cache rebuild failed." >&2
@@ -275,14 +353,21 @@ for site in "${SITES[@]}"; do
   fi
 
   for index in "${solr_indexes[@]}"; do
-    echo "===== ${site}/${index}: rebuilding for declared Solr version change ====="
-    if ! clear_solr_index "${site}" "${index}" || ! rebuild_solr_index "${site}" "${index}"; then
-      echo "ERROR: ${site}/${index}: rebuild failed." >&2
-      failed_indexes+=("${site}/${index} (rebuild)")
+    echo "===== ${site}/${index}: ${RECONCILE_MODE} for declared Solr version change ====="
+    operation_failed=false
+    if [[ "${RECONCILE_MODE}" == rebuild ]] && ! clear_solr_index "${site}" "${index}"; then
+      operation_failed=true
+    elif ! rebuild_solr_index "${site}" "${index}"; then
+      operation_failed=true
+    fi
+
+    if [[ "${operation_failed}" == true ]]; then
+      echo "ERROR: ${site}/${index}: ${RECONCILE_MODE} failed." >&2
+      failed_indexes+=("${site}/${index} (${RECONCILE_MODE})")
     elif [[ "$(get_remaining_items "${site}" "${index}")" == 0 ]]; then
-      rebuilt_indexes+=("${site}/${index}")
+      completed_indexes+=("${site}/${index}")
     else
-      echo "ERROR: ${site}/${index}: tracker items remain after rebuild." >&2
+      echo "ERROR: ${site}/${index}: tracker items remain after ${RECONCILE_MODE}." >&2
       failed_indexes+=("${site}/${index} (verification)")
     fi
     pause_for "${INDEX_PAUSE_SECONDS}"
@@ -291,7 +376,12 @@ for site in "${SITES[@]}"; do
   pause_for "${SITE_PAUSE_SECONDS}"
 done
 
-echo "Solr rebuild complete: ${#rebuilt_indexes[@]} rebuilt, ${#sites_without_solr[@]} sites without Solr indexes, ${#skipped_sites[@]} sites skipped."
+if [[ -n "${INDEX_FILTER}" && "${matched_index_filter}" != true ]]; then
+  echo "ERROR: Index filter did not match an enabled Search API Solr index: ${INDEX_FILTER}" >&2
+  exit 1
+fi
+
+echo "Solr reconciliation complete: ${#completed_indexes[@]} completed, ${#sites_without_solr[@]} sites without Solr indexes, ${#skipped_sites[@]} sites skipped."
 
 if (( ${#failed_indexes[@]} > 0 )); then
   printf 'Failed: %s\n' "${failed_indexes[*]}" >&2
