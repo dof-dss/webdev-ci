@@ -712,10 +712,10 @@ jobs:
 
 commands:
   reconcile_solr_indexes:
-    description: "Rebuild Search API Solr indexes when source and target environments declare different Solr versions"
+    description: "Safely reconcile Search API Solr indexes when source and target environments declare different Solr versions"
     steps:
       - run:
-          name: Rebuild edge indexes when the declared Solr version differs from the source
+          name: Reconcile edge indexes when the declared Solr version differs from the source
           shell: /bin/bash -euo pipefail
           command: |
             # platform sync data uses the edge environment's parent as its
@@ -785,7 +785,8 @@ commands:
             platform ssh \
               --project "${PLATFORM_PROJECT}" \
               --environment "${EDGE_BUILD_BRANCH}" \
-              -- bash -s < "${script_path}"
+              -- env RECONCILE_MODE=rebuild SITE_FILTER= INDEX_FILTER= \
+              bash -s < "${script_path}"
           no_output_timeout: 30m
 
   checkout_code:
