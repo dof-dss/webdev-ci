@@ -13,6 +13,13 @@ jobs:
       - run:
           name: Lint shared-config.yml
           command: yamllint -c .yamllint.yml shared-config.yml
+      - run:
+          name: Reject unescaped Bash here-strings
+          command: |
+            if grep -nE '(^|[^\\])<{3}' shared-config.yml; then
+              echo 'Bash here-strings must escape the CircleCI config marker as \<<<.' >&2
+              exit 1
+            fi
       # 2. Compose minimal config and validate with CircleCI CLI
       - run:
           name: Compose & validate CircleCI config
@@ -25,12 +32,15 @@ jobs:
             # Munge together shared-config contents with stub workflow
             cat shared-config.yml > temp_config.yml
 
-            # Append a stub workflow that calls `build` with required args
+            # Append a stub workflow that calls representative jobs with required args.
             echo 'workflows:' >> temp_config.yml
             echo '  validate:' >> temp_config.yml
             echo '    jobs:' >> temp_config.yml
             # Use your known defaults for the parameters:
             echo '      - build: {php_version: "8.3", ssh_fingerprint: ""}' >> temp_config.yml
+            # Exercise both edge-finalisation paths so reusable commands are compiled.
+            echo '      - sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
+            echo '      - unity_sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
 
             # Validate the composed config
             circleci config validate -c temp_config.yml
