@@ -88,8 +88,10 @@ evidence of a broken index.
 4. If the edge declares a different Solr version, CircleCI downloads the latest
    helper from `webdev-ci/main` and runs it only in the edge environment.
 5. The helper discovers enabled Search API Solr indexes. Each affected site
-   receives one Drupal cache rebuild followed by a clear and chunked rebuild.
-   Sites without an enabled Solr index are logged and skipped.
+   receives one Drupal cache rebuild followed by a clear and throttled rebuild.
+   Transient Solr timeouts are retried from the remaining Search API tracker
+   state, without clearing partial progress. Sites without an enabled Solr
+   index are logged and skipped.
 
 If source and edge intentionally remain on different Solr versions, the edge
 indexes are rebuilt after every data sync. This is intentional: each sync
@@ -98,7 +100,8 @@ source environment.
 
 The command fails rather than guessing if the source environment cannot be
 identified, an environment declares multiple Solr service versions, an affected
-site cannot reach Solr, clearing fails, or indexing stops making progress.
+site cannot reach Solr after the bounded retry window, clearing fails, indexing
+stops making progress, or Drush reports a deterministic non-Solr error.
 
 The script supports both repository layouts used by the consuming projects:
 
@@ -131,15 +134,51 @@ There is no dry-run mode in the helper. To inspect the declared Upsun versions
 without rebuilding, use `platform services --columns type` for the source and
 edge environments.
 
+### Recovering an interrupted edge rebuild
+
+The helper also has a non-destructive `resume` mode. It does not clear an index;
+it continues whatever items are already marked as remaining in the Search API
+tracker. Exact site and index filters keep recovery scoped to the failed work.
+
+Download the helper locally, then run it through the Upsun CLI:
+
+```bash
+curl --fail --location --silent --show-error \
+  https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh \
+  --output /tmp/reconcile-solr-indexes.sh
+
+upsun ssh -p "$PLATFORM_PROJECT" -e edge -- env \
+  RECONCILE_MODE=resume \
+  SITE_FILTER=communityrelations \
+  INDEX_FILTER=default_content \
+  INDEX_CHUNK_SIZE=50 \
+  INDEX_BATCH_SIZE=5 \
+  CHUNK_PAUSE_SECONDS=20 \
+  INDEX_RETRY_DELAY_SECONDS=90 \
+  bash -s < /tmp/reconcile-solr-indexes.sh
+```
+
+Omit `INDEX_FILTER` to resume all enabled Solr indexes for the selected site.
+Omit both filters to resume all discovered sites. Resume mode is appropriate
+after a partial indexing failure; use the normal rebuild mode when an index was
+never cleared and scheduled after the data sync.
+
 ### Tuning
 
-The defaults are intended to reduce sustained load on shared environments:
+The defaults are intentionally conservative for small shared Upsun Solr
+services:
 
-- `INDEX_CHUNK_SIZE=500` and `INDEX_BATCH_SIZE=25` bound each indexing call.
-- `CHUNK_PAUSE_SECONDS=5`, `INDEX_PAUSE_SECONDS=10`, and
-  `SITE_PAUSE_SECONDS=20` throttle work between batches, indexes, and sites.
-- `SOLR_READY_RETRIES=12`, `SOLR_READY_DELAY_SECONDS=10`, and
-  `CLEAR_RETRIES=3` allow a temporarily loading core to become available.
+- `INDEX_CHUNK_SIZE=100` and `INDEX_BATCH_SIZE=5` bound each indexing call and
+  reduce peak request pressure.
+- `CHUNK_PAUSE_SECONDS=15`, `INDEX_PAUSE_SECONDS=30`, and
+  `SITE_PAUSE_SECONDS=45` throttle work between chunks, indexes, and sites.
+- `SOLR_READY_RETRIES=12`, `SOLR_READY_DELAY_SECONDS=20`, and
+  `CLEAR_RETRIES=5` allow a temporarily loading core to become available.
+- `INDEX_RETRIES=5` and `INDEX_RETRY_DELAY_SECONDS=60` retry known transient
+  Solr failures. If a timed-out call made tracker progress, the helper cools
+  down and resumes from the new remaining count rather than clearing again.
+- `RECONCILE_MODE=rebuild` is the nightly default. `RECONCILE_MODE=resume`,
+  `SITE_FILTER`, and `INDEX_FILTER` provide targeted manual recovery.
 
 These values can be overridden as environment variables. Pause values may be
 zero; chunk sizes and retry counts must remain greater than zero.
