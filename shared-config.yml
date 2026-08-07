@@ -164,7 +164,6 @@ jobs:
           name: Reset QA account passwords
           command: |
             platform environment:drush password_qa_accounts -e $EDGE_BUILD_BRANCH
-      - reconcile_solr_indexes
 
   coding_standards:
     shell: /bin/bash -euo pipefail
@@ -643,7 +642,6 @@ jobs:
                 platform drush "bulk_update_qa_accounts enable -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
               fi
             done
-      - reconcile_solr_indexes
 
   # THEMING repo jobs.
   theme_install:
@@ -711,84 +709,6 @@ jobs:
           command: npm run build
 
 commands:
-  reconcile_solr_indexes:
-    description: "Safely reconcile Search API Solr indexes when source and target environments declare different Solr versions"
-    steps:
-      - run:
-          name: Reconcile edge indexes when the declared Solr version differs from the source
-          shell: /bin/bash -euo pipefail
-          command: |
-            # platform sync data uses the edge environment's parent as its
-            # source. Detect that parent rather than assuming a branch name.
-            source_environment=$(platform environment:info parent \
-              --project "${PLATFORM_PROJECT}" \
-              --environment "${EDGE_BUILD_BRANCH}" \
-              --format plain)
-            if [[ -z "${source_environment}" || "${source_environment}" == "-" ]]; then
-              echo "ERROR: Could not determine the data-sync source environment for ${EDGE_BUILD_BRANCH}." >&2
-              exit 1
-            fi
-
-            # Read the service declarations deployed to each environment. The
-            # command returns an empty value when an environment has no Solr
-            # service and rejects ambiguous projects with multiple versions.
-            declared_solr_version() {
-              local environment="$1"
-              local service_types
-              local -a versions
-
-              if ! service_types=$(platform services \
-                --project "${PLATFORM_PROJECT}" \
-                --environment "${environment}" \
-                --columns type \
-                --format tsv \
-                --no-header); then
-                echo "ERROR: Could not read services for environment ${environment}." >&2
-                return 1
-              fi
-              mapfile -t versions < <(
-                awk -F '\t' '$1 ~ /^solr:[0-9]+([.][0-9]+)*$/ { sub(/^solr:/, "", $1); print $1 }' \<<< "${service_types}" | sort -u
-              )
-
-              if (( ${#versions[@]} > 1 )); then
-                echo "ERROR: Environment ${environment} declares multiple Solr versions: ${versions[*]}." >&2
-                return 1
-              fi
-              printf '%s\n' "${versions[0]:-}"
-            }
-
-            if ! source_solr_version=$(declared_solr_version "${source_environment}"); then
-              exit 1
-            fi
-            if ! target_solr_version=$(declared_solr_version "${EDGE_BUILD_BRANCH}"); then
-              exit 1
-            fi
-
-            if [[ -z "${target_solr_version}" ]]; then
-              echo "No Solr service is declared for ${EDGE_BUILD_BRANCH}; skipping index rebuild."
-              exit 0
-            fi
-            if [[ "${source_solr_version}" == "${target_solr_version}" ]]; then
-              echo "Source and target both declare Solr ${target_solr_version}; no index rebuild needed."
-              exit 0
-            fi
-
-            echo "Declared Solr version changed: source=${source_solr_version:-none}, target=${target_solr_version}."
-
-            # Fetch the current helper from main only when a rebuild is needed.
-            # This repository intentionally follows the latest HEAD version.
-            script_path="/tmp/reconcile-solr-indexes.sh"
-            script_url="https://raw.githubusercontent.com/dof-dss/webdev-ci/main/scripts/reconcile-solr-indexes.sh?nocache=$(date +%s)"
-            curl --fail --location --silent --show-error "${script_url}" --output "${script_path}"
-            chmod +x "${script_path}"
-
-            platform ssh \
-              --project "${PLATFORM_PROJECT}" \
-              --environment "${EDGE_BUILD_BRANCH}" \
-              -- env RECONCILE_MODE=rebuild SITE_FILTER= INDEX_FILTER= \
-              bash -s < "${script_path}"
-          no_output_timeout: 30m
-
   checkout_code:
     description: "Handle composer access tokens, SSH key fingerprints and code checkout"
     parameters:

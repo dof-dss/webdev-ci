@@ -38,7 +38,7 @@ jobs:
             echo '    jobs:' >> temp_config.yml
             # Use your known defaults for the parameters:
             echo '      - build: {php_version: "8.3", ssh_fingerprint: ""}' >> temp_config.yml
-            # Exercise both edge-finalisation paths so reusable commands are compiled.
+            # Compile both edge-finalisation paths.
             echo '      - sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
             echo '      - unity_sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
 
