@@ -131,7 +131,7 @@ run_case \
 
 run_case \
   project_site_with_solr project true \
-  'rebuild for declared Solr version change' 0
+  'rebuild requested manually' 0
 
 run_case \
   transient_timeout_with_progress project true \
@@ -143,7 +143,7 @@ run_case \
 
 run_case \
   resume_without_clear project true \
-  'resume for declared Solr version change' 0 resume false example default_index
+  'resume requested manually' 0 resume false example default_index
 
 resume_log="${TEST_ROOT}/resume_without_clear/commands"
 if grep -q 'search-api:clear' "${resume_log}"; then

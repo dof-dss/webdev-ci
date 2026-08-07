@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 
-# Rebuild enabled Search API Solr indexes in an edge environment.
+# Manually reconcile enabled Search API Solr indexes in an Upsun environment.
 #
-# CircleCI compares the Solr service types declared by the data-sync source and
-# target Upsun environments before invoking this helper. It does not invoke the
-# script when the target has no Solr service or when the declared versions
-# match. Keeping that decision in shared-config.yml means this script only needs
-# to perform one job: safely reconcile the target indexes after a version
-# change. The default mode clears and rebuilds indexes; resume mode continues
-# tracker work without clearing already indexed documents.
+# The script is designed to be streamed from a developer's terminal into an
+# Upsun SSH session. The default mode clears and rebuilds indexes; resume mode
+# continues tracker work without clearing already indexed documents. The caller
+# is responsible for selecting the intended project, environment, mode, site,
+# and index because nightly CI does not invoke this helper.
 #
 # Sites without an enabled Search API Solr index are logged and skipped. This
 # supports multisite projects where only some sites use search as well as
@@ -353,7 +351,7 @@ for site in "${SITES[@]}"; do
   fi
 
   for index in "${solr_indexes[@]}"; do
-    echo "===== ${site}/${index}: ${RECONCILE_MODE} for declared Solr version change ====="
+    echo "===== ${site}/${index}: ${RECONCILE_MODE} requested manually ====="
     operation_failed=false
     if [[ "${RECONCILE_MODE}" == rebuild ]] && ! clear_solr_index "${site}" "${index}"; then
       operation_failed=true
