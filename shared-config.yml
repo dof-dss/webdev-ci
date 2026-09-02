@@ -153,14 +153,6 @@ jobs:
           command: |
             platform sync data -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH -y
       - run:
-          name: Set GAC state variable (if present)
-          command: |
-            if [ -n "${GAC_ACCESS_TOKEN:-}" ]; then
-              platform environment:drush "sset google_analytics_counter.access_token ${GAC_ACCESS_TOKEN}" \
-                -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
-            fi
-          when: always
-      - run:
           name: Reset QA account passwords
           command: |
             platform environment:drush password_qa_accounts -e $EDGE_BUILD_BRANCH
