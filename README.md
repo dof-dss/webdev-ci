@@ -1,171 +1,57 @@
-# Web development CI config
+# Web development CI
 
-This repo houses the shared CI config for most webdev repositories.
+Shared CircleCI configuration for the DoF web development repositories.
 
-It allows us to more easily maintain common elements of CI config across our projects. Pipelines can now be given parameters, per project, which allows for localised overrides or sensible defaults to permit variation across projects.
+## Start here
 
-## How it works
+| Path | Status and purpose | Start here |
+| --- | --- | --- |
+| `shared-config.yml` | Existing configuration for applications, supporting packages and themes. | [Legacy CI guide](docs/legacy-ci.md) |
+| `config/application/` | New shared jobs for Unity, corp-lite, DEPT and NIDirect. Projects must switch to these explicitly. | [Getting started in 5–10 minutes](docs/getting-started.md) |
 
-Circle CI dynamic pipelines (https://circleci.com/docs/using-dynamic-configuration/#a-basic-example) with Circle CI orbs (https://circleci.com/docs/orb-intro/) for preprocessing our config.
+New developers should start with the [getting-started
+guide](docs/getting-started.md). It shows how to combine the YAML files and
+check a project configuration.
 
-## How to use it
+Existing projects keep using `shared-config.yml` until their own CircleCI setup
+is changed. Adding the new configuration does not switch their overnight builds.
+Both setups download shared code from `main`.
 
-Use this starting template in your project's `.circleci/config.yml` file.
+## New application workflows
 
-Adjust the following JSON parameters that are passed into the pipeline continuation step:
+- [Getting started](docs/getting-started.md): tools, packing and local evaluation.
+- [Application CI reference](docs/application-ci.md): parameters, scripts and adoption details.
+- [Unity 1 example](examples/unity1/README.md): sample configuration and commands to test it.
+- [Project examples](examples/application/): setup template and project parameters.
 
-- `php_version`: make sure this matches your production value.
-- `drupal_core_version`: Set as required.
-- `coding_standards_dirs`: Space separated directories to check using PHPCS, use `$PROJECT_ROOT` to keep paths consistent.
-- `deprecated_code_dirs`: As above but for `drupal-check` tool.
+To change a new job, start in `config/application`. The Edge scripts are in
+`scripts/edge`, and their tests are in `scripts/tests/test_application_ci.py`.
+Both old and new jobs use the root `phpcs.sh` helper.
 
+## Repository checks
 
-```
-version: 2.1
+`.circleci/config.yml` runs two independent jobs:
 
-setup: true
+- `validate-legacy-config` checks the old YAML using sample job settings.
+- `validate-application-config` runs the offline tests and checks the new YAML for each example project and action.
 
-orbs:
-  continuation: circleci/continuation@0.1.2
+These checks do not run Edge builds or refresh data. The old and new
+configurations are checked separately.
 
-workflows:
-  setup:
-    jobs:
-      - setup-and-dispatch
+## Other tooling
 
-jobs:
-  setup-and-dispatch:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - run:
-          name: Fetch shared CI config
-          command: |
-            wget https://raw.githubusercontent.com/dof-dss/webdev-ci/refs/heads/main/shared-config.yml -O shared-config.yml
-      - continuation/continue:
-          configuration_path: shared-config.yml
-          parameters: |
-            {
-              "php_version": "8.3",
-              "drupal_core_version": "10.4",
-              "coding_standards_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
-              "deprecated_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom"
-            }
-
-
-```
-
-## Gotchas
-
-- YAML anchors can't be preprocessed with pipeline parameters (yet), so you'll see these re-declared to prioritise parameter usage over lack of repetition.
-- There's a preprocess/setup step involved now where a continuation orb will take the central config file, and preprocess it into a final YAML file which is then executed in the usual workflow steps.
-
-## Manual Solr bulk reconciliation
-
-Nightly edge-finalisation jobs do not rebuild Search API Solr indexes. Bulk
-reconciliation is deliberately a developer-run operation because its duration
-and resource cost vary substantially with service allocation, site count, and
-content volume.
-
-The retained `scripts/reconcile-solr-indexes.sh` helper discovers enabled Search
-API Solr indexes and supports throttled full rebuilds or non-destructive resume
-runs. Stream it into a deliberately selected Upsun SSH session from a developer
-terminal; do not run it against an environment until the target and mode have
-been checked.
-
-`platform sync data` copies Drupal's database and files, including Search API
-tracker state, but the target Solr index remains a separate service. A developer
-should therefore assess tracker state, target service capacity, and whether a
-clear is actually required before choosing `rebuild` or `resume`.
-
-The script supports both repository layouts used by the consuming projects:
-
-- `project/sites` for Unity and Corp Lite multisite projects.
-- `web/sites` for DEPT, nidirect, and other standard Drupal projects.
-
-The sites directory can be overridden with `SITES_ROOT`, and the Drupal root
-with `DRUPAL_ROOT`, when a project uses another layout. No project-specific Solr
-version is hard-coded in the shared configuration.
-
-### Local debugging
-
-Running the helper in its default `rebuild` mode clears and rebuilds every
-enabled local Search API Solr index. Use a disposable local index:
-
-```bash
-ddev exec env \
-  PLATFORM_APP_DIR=/var/www/html \
-  CHUNK_PAUSE_SECONDS=0 \
-  INDEX_PAUSE_SECONDS=0 \
-  SITE_PAUSE_SECONDS=0 \
-  SOLR_READY_DELAY_SECONDS=0 \
-  bash -s \
-  < /path/to/webdev-ci/scripts/reconcile-solr-indexes.sh
-```
-
-Use `bash -x -s` instead of `bash -s` to trace commands during local debugging.
-There is no dry-run mode in the helper. Inspect the target environment and its
-Search API tracker state separately before running it.
-
-### Running against Upsun
-
-The helper also has a non-destructive `resume` mode. It does not clear an index;
-it continues whatever items are already marked as remaining in the Search API
-tracker. Exact site and index filters keep recovery scoped to the failed work.
-
-From a local `webdev-ci` checkout, stream the helper through the Upsun CLI:
-
-```bash
-upsun ssh -p "$PLATFORM_PROJECT" -e edge -- env \
-  RECONCILE_MODE=resume \
-  SITE_FILTER=communityrelations \
-  INDEX_FILTER=default_content \
-  INDEX_CHUNK_SIZE=50 \
-  INDEX_BATCH_SIZE=5 \
-  CHUNK_PAUSE_SECONDS=20 \
-  INDEX_RETRY_DELAY_SECONDS=90 \
-  bash -s < scripts/reconcile-solr-indexes.sh
-```
-
-Omit `INDEX_FILTER` to resume all enabled Solr indexes for the selected site.
-Omit both filters to resume all discovered sites. Resume mode is appropriate
-after a partial indexing failure; use the normal rebuild mode when an index was
-never cleared and scheduled after the data sync.
-
-### Tuning
-
-The defaults are intentionally conservative for small shared Upsun Solr
-services:
-
-- `INDEX_CHUNK_SIZE=100` and `INDEX_BATCH_SIZE=5` bound each indexing call and
-  reduce peak request pressure.
-- `CHUNK_PAUSE_SECONDS=15`, `INDEX_PAUSE_SECONDS=30`, and
-  `SITE_PAUSE_SECONDS=45` throttle work between chunks, indexes, and sites.
-- `SOLR_READY_RETRIES=12`, `SOLR_READY_DELAY_SECONDS=20`, and
-  `CLEAR_RETRIES=5` allow a temporarily loading core to become available.
-- `INDEX_RETRIES=5` and `INDEX_RETRY_DELAY_SECONDS=60` retry known transient
-  Solr failures. If a timed-out call made tracker progress, the helper cools
-  down and resumes from the new remaining count rather than clearing again.
-- `RECONCILE_MODE=rebuild` is the script default. `RECONCILE_MODE=resume`,
-  `SITE_FILTER`, and `INDEX_FILTER` provide targeted manual recovery.
-
-These values can be overridden as environment variables. Pause values may be
-zero; chunk sizes and retry counts must remain greater than zero.
-
-### Tests
-
-Run the focused regression coverage with:
-
-```bash
-bash scripts/tests/reconcile-solr-indexes.sh
-```
+[Manual Solr reconciliation](docs/solr-reconciliation.md) is run manually,
+separately from CI.
 
 ## Contribution
 
 > Contributors to repositories hosted in dof-dss are expected to follow the Contributor Covenant Code of Conduct, and those working within Government are also expected to follow the Northern Civil Service Code of Ethics and Civil Service Code. For details see https://github.com/dof-dss/contributor-code-of-conduct
 
-All changes should be submitted with an appropriate pull request (PR) in GitHub. Direct commits to `main` or `development` are not normally permitted.
+All changes should be submitted with an appropriate pull request (PR) in GitHub.
+Direct commits to `main` or `development` are not normally permitted.
 
 ## Licence
 
-Unless stated otherwise, the codebase is released under the [MIT License](http://www.opensource.org/licenses/mit-license.php). This covers both the codebase and any sample code in the documentation.
+Unless stated otherwise, the codebase is released under the [MIT
+License](http://www.opensource.org/licenses/mit-license.php). This covers both
+the codebase and any sample code in the documentation.

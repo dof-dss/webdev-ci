@@ -1,0 +1,46 @@
+when:
+  or:
+    - equal:
+        - checks
+        - << pipeline.parameters.ci_action >>
+    - and:
+        - equal:
+            - auto
+            - << pipeline.parameters.ci_action >>
+        - not:
+            equal:
+              - << pipeline.parameters.source_branch >>
+              - << pipeline.git.branch >>
+        - not:
+            equal:
+              - scheduled_pipeline
+              - << pipeline.trigger_source >>
+        - not:
+            equal:
+              - api
+              - << pipeline.trigger_source >>
+jobs:
+  - build:
+      php_version: << pipeline.parameters.php_version >>
+      ssh_fingerprint: << pipeline.parameters.ssh_fingerprint >>
+  - coding_standards:
+      php_version: << pipeline.parameters.php_version >>
+      requires:
+        - build
+      coding_standards_dirs: << pipeline.parameters.coding_standards_dirs >>
+      ignore_dirs: << pipeline.parameters.ignore_dirs >>
+  - deprecated_code_phpstan:
+      php_version: << pipeline.parameters.php_version >>
+      requires:
+        - build
+      deprecated_code_dirs: << pipeline.parameters.deprecated_code_dirs >>
+  - disallowed_functions:
+      php_version: << pipeline.parameters.php_version >>
+      requires:
+        - build
+      custom_code_dirs: << pipeline.parameters.custom_code_dirs >>
+  - check_illegal_updates:
+      php_version: << pipeline.parameters.php_version >>
+      requires:
+        - build
+      filters: pipeline.parameters.check_illegal_updates

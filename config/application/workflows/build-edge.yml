@@ -1,0 +1,21 @@
+when:
+  or:
+    - equal:
+        - edge-build
+        - << pipeline.parameters.ci_action >>
+    - and:
+        - equal:
+            - auto
+            - << pipeline.parameters.ci_action >>
+        - equal:
+            - scheduled_pipeline
+            - << pipeline.trigger_source >>
+        - equal:
+            - edge_build
+            - << pipeline.schedule.name >>
+jobs:
+  - edge_build_shared:
+      php_version: << pipeline.parameters.php_version >>
+      ssh_fingerprint: << pipeline.parameters.ssh_fingerprint >>
+      build_themes: << pipeline.parameters.build_themes >>
+      node_version: << pipeline.parameters.node_version >>

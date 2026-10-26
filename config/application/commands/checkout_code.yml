@@ -1,0 +1,10 @@
+description: Handle composer access tokens, SSH key fingerprints and code checkout
+parameters:
+  ssh_fingerprint:
+    type: string
+    default: ''
+steps:
+  - add_ssh_keys:
+      fingerprints:
+        - << parameters.ssh_fingerprint >>
+  - checkout

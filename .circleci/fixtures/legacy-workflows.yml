@@ -1,0 +1,22 @@
+# Appended only to shared-config.yml for compiler validation. Never executed.
+workflows:
+  validate-legacy-jobs:
+    jobs:
+      - build:
+          php_version: "8.3"
+          ssh_fingerprint: ""
+      - build_edge:
+          edge_branch: edge
+          edge_build_dofdss_packages: ""
+          php_version: "8.3"
+      - sync_data:
+          edge_branch: edge
+          php_version: "8.3"
+      - unity_edge_build:
+          edge_branch: edge
+          edge_build_dofdss_packages: ""
+          node_version: "18"
+          php_version: "8.3"
+      - unity_sync_data:
+          edge_branch: edge
+          php_version: "8.3"
