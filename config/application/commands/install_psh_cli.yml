@@ -1,0 +1,8 @@
+description: Install the Platform.sh CLI tool
+steps:
+  - run:
+      name: Install the Platform.sh CLI tool
+      command: curl -sS https://platform.sh/cli/installer | php
+  - run:
+      name: Add platform cli tool to $PATH
+      command: echo 'export PATH="$HOME/"'.platformsh/bin':"$PATH"' >> $BASH_ENV

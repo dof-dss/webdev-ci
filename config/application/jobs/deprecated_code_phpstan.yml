@@ -1,0 +1,19 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  deprecated_code_dirs:
+    type: string
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PLATFORM_REGION: uk-1.platform.sh
+      PROJECT_ROOT: /home/docker/project
+      PHP_EXTENSION_GD: 1
+      PHP_INI_MEMORY_LIMIT: 1g
+steps:
+  - attach_workspace:
+      at: ./
+  - run:
+      name: Deprecated code check
+      command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>

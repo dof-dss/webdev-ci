@@ -1,51 +1,72 @@
 version: 2.1
 
-jobs:
-  validate-config:
+executors:
+  config-validator:
     docker:
       - image: cimg/python:3.9
+
+commands:
+  install-circleci-cli:
+    steps:
+      - run:
+          name: Install CircleCI CLI
+          command: curl -fLSs https://circle.ci/cli | sudo bash
+
+jobs:
+  validate-legacy-config:
+    executor: config-validator
     steps:
       - checkout
-      # 1. Syntax check with yamllint
       - run:
-          name: Install yamllint
+          name: Install legacy YAML linter
           command: pip install --quiet yamllint
       - run:
-          name: Lint shared-config.yml
-          command: yamllint -c .yamllint.yml shared-config.yml
+          name: Lint legacy config and validation fixture
+          command: yamllint -c .yamllint.yml shared-config.yml .circleci/fixtures/legacy-workflows.yml
       - run:
-          name: Reject unescaped Bash here-strings
+          name: Reject unescaped Bash here-strings in legacy config
           command: |
             if grep -nE '(^|[^\\])<{3}' shared-config.yml; then
               echo 'Bash here-strings must escape the CircleCI config marker as \<<<.' >&2
               exit 1
             fi
-      # 2. Compose minimal config and validate with CircleCI CLI
+      - install-circleci-cli
       - run:
-          name: Compose & validate CircleCI config
+          name: Compile legacy jobs without running them
           command: |
-            # Install CircleCI CLI
-            curl -fLSs https://circle.ci/cli | sudo bash
-            echo 'export PATH="$HOME/.circleci/bin:$PATH"' >> $BASH_ENV
-            source $BASH_ENV
+            cat shared-config.yml .circleci/fixtures/legacy-workflows.yml > /tmp/legacy-ci.yml
+            circleci config validate /tmp/legacy-ci.yml
 
-            # Munge together shared-config contents with stub workflow
-            cat shared-config.yml > temp_config.yml
-
-            # Append a stub workflow that calls representative jobs with required args.
-            echo 'workflows:' >> temp_config.yml
-            echo '  validate:' >> temp_config.yml
-            echo '    jobs:' >> temp_config.yml
-            # Use your known defaults for the parameters:
-            echo '      - build: {php_version: "8.3", ssh_fingerprint: ""}' >> temp_config.yml
-            # Compile both edge-finalisation paths.
-            echo '      - sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
-            echo '      - unity_sync_data: {edge_branch: "edge", php_version: "8.3"}' >> temp_config.yml
-
-            # Validate the composed config
-            circleci config validate -c temp_config.yml
+  validate-application-config:
+    executor: config-validator
+    steps:
+      - checkout
+      - run:
+          name: Install application validation dependencies
+          command: pip install --quiet yamllint PyYAML==6.0.3
+      - install-circleci-cli
+      - run:
+          name: Test new application workflows offline
+          command: |
+            PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_application_ci.py
+            for script in scripts/edge/*.sh scripts/pack-application.sh scripts/unpack-shared-tools.sh; do bash -n "$script"; done
+            yamllint -c .yamllint.yml config/application templates/application/setup.yml
+      - run:
+          name: Pack and compile new application workflows
+          command: |
+            bash scripts/pack-application.sh > /tmp/application-ci.yml
+            circleci config validate /tmp/application-ci.yml
+            for parameters in templates/application/*.json; do
+              for action in checks edge-build edge-refresh; do
+                jq --arg action "$action" '.ci_action = $action' \
+                  "$parameters" > /tmp/application-parameters.json
+                circleci config process /tmp/application-ci.yml \
+                  --pipeline-parameters /tmp/application-parameters.json > /tmp/application-processed.yml
+              done
+            done
 
 workflows:
-  build-test:
+  validate-configurations:
     jobs:
-      - validate-config
+      - validate-legacy-config
+      - validate-application-config

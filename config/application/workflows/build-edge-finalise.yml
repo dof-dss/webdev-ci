@@ -1,0 +1,6 @@
+when:
+  equal: [edge-refresh, << pipeline.parameters.ci_action >>]
+jobs:
+  - edge_refresh_shared:
+      php_version: << pipeline.parameters.php_version >>
+      ssh_fingerprint: << pipeline.parameters.ssh_fingerprint >>

@@ -1,0 +1,12 @@
+{
+  "coding_standards_dirs": "web/modules/custom web/modules/origins web/themes/custom",
+  "custom_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins",
+  "deprecated_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
+  "edge_branch": "DEPT-edge",
+  "edge_build_dofdss_packages": "dof-dss/nicsdru_origins_theme:dev-10.x-dev dof-dss/nicsdru_origins_modules:dev-10.x-dev",
+  "ignore_dirs": "web/themes/origins/node_modules web/themes/custom/nicsdru_dept_theme/node_modules",
+  "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
+  "deploy": "deploy",
+  "content": "structure-sync",
+  "qa_staff": true
+}

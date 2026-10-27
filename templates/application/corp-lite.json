@@ -1,0 +1,12 @@
+{
+  "coding_standards_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
+  "custom_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/modules/origins",
+  "deprecated_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
+  "edge_branch": "edge",
+  "edge_build_dofdss_packages": "dof-dss/nicsdru_origins_modules:dev-11.x",
+  "ignore_dirs": "web/themes/origins/node_modules web/themes/custom/nicsdru_corplite_theme/node_modules",
+  "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
+  "layout": "multisite",
+  "preflight": "required",
+  "content": "structure-sync"
+}

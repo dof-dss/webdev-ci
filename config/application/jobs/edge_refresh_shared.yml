@@ -1,0 +1,31 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  ssh_fingerprint:
+    type: string
+    default: ''
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PHP_EXTENSION_GD: 1
+      EDGE_BRANCH: << pipeline.parameters.edge_branch >>
+      EDGE_ENVIRONMENT: << pipeline.parameters.environment >>
+      EDGE_LAYOUT: << pipeline.parameters.layout >>
+      EDGE_SITES: << pipeline.parameters.sites >>
+      EDGE_URI: << pipeline.parameters.uri >>
+      EDGE_PREFLIGHT: << pipeline.parameters.preflight >>
+      EDGE_DEPLOY: << pipeline.parameters.deploy >>
+      EDGE_CONTENT: << pipeline.parameters.content >>
+      EDGE_FASTLY: << pipeline.parameters.fastly >>
+      EDGE_QA_STAFF: << pipeline.parameters.qa_staff >>
+      EDGE_AFTER_COMMAND: << pipeline.parameters.after_command >>
+steps:
+  - checkout_code:
+      ssh_fingerprint: << parameters.ssh_fingerprint >>
+  - prepare_shared_tools
+  - install_psh_cli
+  - run:
+      name: Sync parent data and finalise all sites
+      command: bash "$CI_SHARED_TOOLS/refresh.sh"
+      no_output_timeout: 30m

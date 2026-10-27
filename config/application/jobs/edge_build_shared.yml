@@ -1,0 +1,48 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  ssh_fingerprint:
+    type: string
+    default: ''
+  build_themes:
+    type: boolean
+    default: false
+  node_version:
+    type: string
+    default: '18'
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PHP_EXTENSION_GD: 1
+      PHP_INI_MEMORY_LIMIT: -1
+      EDGE_BRANCH: << pipeline.parameters.edge_branch >>
+      SOURCE_BRANCH: << pipeline.parameters.source_branch >>
+      EDGE_PACKAGES: << pipeline.parameters.edge_build_dofdss_packages >>
+      THEME_BUILD_SCRIPT: << pipeline.parameters.theme_build_script >>
+      THEME_SITES_DIR: << pipeline.parameters.theme_sites_dir >>
+      THEME_ASSET_PATHS: << pipeline.parameters.theme_asset_paths >>
+      CPPFLAGS: -DPNG_ARM_NEON_OPT=0
+steps:
+  - checkout_code:
+      ssh_fingerprint: << parameters.ssh_fingerprint >>
+  - prepare_shared_tools
+  - when:
+      condition: << parameters.build_themes >>
+      steps:
+        - run:
+            name: Prepare existing theme toolchain
+            command: |
+              touch ~/.bashrc
+              curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+              sudo apt-get update
+              sudo apt-get install -y libjpeg-dev make python3 g++ dh-autoreconf
+              export NVM_DIR="$HOME/.nvm"
+              source "$NVM_DIR/nvm.sh"
+              nvm install << parameters.node_version >>
+              nvm use << parameters.node_version >>
+              printf 'export PATH=%q\n' "$PATH" >> "$BASH_ENV"
+  - run:
+      name: Prepare and publish Edge code and optional assets
+      command: bash "$CI_SHARED_TOOLS/build.sh"
+      no_output_timeout: 20m

@@ -1,0 +1,102 @@
+version: 2.1
+parameters:
+  coding_standards_dirs:
+    type: string
+    default: ''
+  custom_code_dirs:
+    type: string
+    default: ''
+  deprecated_code_dirs:
+    type: string
+    default: ''
+  edge_branch:
+    type: string
+    default: ''
+  edge_build_dofdss_packages:
+    type: string
+    default: ''
+  ignore_dirs:
+    type: string
+    default: ''
+  node_version:
+    type: string
+    default: '18'
+  php_version:
+    type: string
+    default: '8.3'
+  ssh_fingerprint:
+    type: string
+    default: ''
+  ci_action:
+    type: enum
+    enum:
+      - none
+      - auto
+      - checks
+      - edge-build
+      - edge-refresh
+    default: none
+  source_branch:
+    type: string
+    default: development
+  environment:
+    type: string
+    default: ''
+  sites:
+    type: string
+    default: ''
+  uri:
+    type: string
+    default: default
+  preflight:
+    type: enum
+    enum:
+      - none
+      - required
+    default: none
+  deploy:
+    type: enum
+    enum:
+      - standard
+      - deploy
+    default: standard
+  content:
+    type: enum
+    enum:
+      - none
+      - unity
+      - structure-sync
+    default: none
+  fastly:
+    type: enum
+    enum:
+      - keep
+      - uninstall
+    default: keep
+  qa_staff:
+    type: boolean
+    default: false
+  after_command:
+    type: string
+    default: ''
+  theme_build_script:
+    type: string
+    default: ''
+  theme_sites_dir:
+    type: string
+    default: project/sites
+  theme_asset_paths:
+    type: string
+    default: ''
+  check_illegal_updates:
+    type: boolean
+    default: false
+  layout:
+    type: enum
+    enum:
+      - single
+      - multisite
+    default: single
+  build_themes:
+    type: boolean
+    default: false

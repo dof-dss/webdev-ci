@@ -1,0 +1,17 @@
+{
+  "coding_standards_dirs": "${PROJECT_ROOT}/project/sites ${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/themes/custom ${PROJECT_ROOT}/web/profiles/unity ${PROJECT_ROOT}/web/profiles/origins",
+  "custom_code_dirs": "${PROJECT_ROOT}/project/sites ${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/themes/custom ${PROJECT_ROOT}/web/profiles/unity ${PROJECT_ROOT}/web/profiles/origins",
+  "deprecated_code_dirs": "${PROJECT_ROOT}/project/sites ${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/interim ${PROJECT_ROOT}/web/themes/custom ${PROJECT_ROOT}/web/profiles/unity ${PROJECT_ROOT}/web/profiles/origins",
+  "edge_branch": "edge",
+  "edge_build_dofdss_packages": "dof-dss/nicsdru_unity_theme:dev-11.x-dev dof-dss/nicsdru_origins_modules:dev-11.x-dev dof-dss/nicsdru_unity_modules:dev-11.x-dev dof-dss/nicsdru_unity_profile:dev-11.x-dev",
+  "ignore_dirs": "project/sites/*/themes/*/node_modules web/themes/origins/node_modules web/themes/custom/nicsdru_unity_theme/node_modules",
+  "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
+  "layout": "multisite",
+  "preflight": "required",
+  "content": "unity",
+  "fastly": "uninstall",
+  "theme_build_script": "build-themes.sh",
+  "theme_asset_paths": ":(glob)project/sites/*/themes/*/css/**/*.css\n:(glob)project/sites/*/themes/*/images/**",
+  "check_illegal_updates": true,
+  "build_themes": true
+}

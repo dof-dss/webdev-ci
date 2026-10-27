@@ -1,0 +1,17 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  custom_code_dirs:
+    type: string
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PROJECT_ROOT: /home/docker/project
+      PHP_INI_MEMORY_LIMIT: 1g
+steps:
+  - attach_workspace:
+      at: ./
+  - run:
+      name: Check for disallowed function calls
+      command: vendor/bin/phpstan analyse << parameters.custom_code_dirs >> -c .circleci/phpstan.neon
