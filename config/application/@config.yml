@@ -9,9 +9,6 @@ parameters:
   deprecated_code_dirs:
     type: string
     default: ''
-  drupal_core_version:
-    type: string
-    default: '10.4'
   edge_branch:
     type: string
     default: ''
@@ -30,17 +27,15 @@ parameters:
   ssh_fingerprint:
     type: string
     default: ''
-  supporting_repo_dependent_packages:
-    type: string
-    default: ''
   ci_action:
     type: enum
     enum:
+      - none
       - auto
       - checks
       - edge-build
       - edge-refresh
-    default: auto
+    default: none
   source_branch:
     type: string
     default: development
@@ -82,9 +77,6 @@ parameters:
     type: boolean
     default: false
   after_command:
-    type: string
-    default: ''
-  site_hook:
     type: string
     default: ''
   theme_build_script:

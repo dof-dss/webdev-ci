@@ -7,11 +7,15 @@
 - `jobs/` defines the work to run.
 - `workflows/` selects jobs and their running order.
 
-From the repository root, combine these files into one YAML file:
+From the repository root, bundle shared scripts and combine these files using
+the CircleCI CLI:
 
 ```bash
-circleci config pack config/application > /tmp/application.yml
+bash scripts/pack-application.sh > /tmp/application.yml
 ```
+
+See [how the script bundle works](../docs/shared-script-bundle.md) for assembly,
+unpacking and the jobs that use it.
 
 Existing projects still use [`shared-config.yml`](../shared-config.yml). Edit
 that file only when changing the old jobs. Do not replace it with the packed

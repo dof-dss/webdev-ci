@@ -11,7 +11,7 @@ or start a hosted job to follow it.
 
 | Tool | Used for |
 | --- | --- |
-| Git and Bash | Working with the repository and running script tests |
+| Git, Bash, tar and base64 | Working with the repository and running script tests |
 | [CircleCI CLI](https://cli.circleci.com/) | Packing, validating and processing configuration |
 | jq | Selecting project parameters and the workflow to inspect |
 | Python 3 and PyYAML | Optional local tests |
@@ -35,8 +35,8 @@ not provide a local job executor.
 | Where | What to look at |
 | --- | --- |
 | [config/application](../config/application/) | Shared jobs, commands, workflows and parameter declarations |
-| [examples/application](../examples/application/) | Project parameter files and the project setup template |
-| [Unity 1 example](../examples/unity1/README.md) | A concrete Drupal 11 configuration and job evaluation commands |
+| [templates/application](../templates/application/) | Project parameter files and the project setup template |
+| [Corp-lite walkthrough](walkthroughs/corp-lite.md) | Project setup, manual testing and rollout |
 | [scripts/edge](../scripts/edge/) | Build, sync and per-site finalisation scripts |
 
 There are three workflows: check code quality, build the Edge branch, and
@@ -48,7 +48,7 @@ and data refresh run on separate schedules.
 From the repository root:
 
 ```bash
-circleci config pack config/application > /tmp/webdev-ci.yml
+bash scripts/pack-application.sh > /tmp/webdev-ci.yml
 less /tmp/webdev-ci.yml
 ```
 
@@ -59,11 +59,12 @@ present: packing combines files; processing resolves those references.
 ## 3. Choose a project and inspect its checks
 
 This example uses corp-lite. Substitute `unity.json`, `dept.json` or
-`nidirect.json` for another project. For the Unity 1 Drupal 11 example, use
-`examples/unity1/parameters.json` instead.
+`nidirect.json` for another project. For an adopted project, use its own
+`.circleci/application.json` instead. Templates contain placeholder settings
+and are suitable here for compilation, not hosted execution.
 
 ```bash
-jq '.ci_action = "checks"' examples/application/corp-lite.json \
+jq '.ci_action = "checks"' templates/application/corp-lite.json \
   > /tmp/webdev-ci-parameters.json
 
 circleci config validate /tmp/webdev-ci.yml
@@ -109,7 +110,8 @@ The tests cover:
   settings have the right types. Schedules, branches and manual actions
   select the expected workflows.
 - Old and new configurations remain separate.
-- Loading shared scripts from `main`, using a local archive instead of GitHub.
+- Downloading a selected shared branch using a local archive instead of GitHub,
+  and checking that bundled scripts match the checkout.
 - Git pushes behave correctly when nothing changes, only source code changes,
   compiled assets change, or another build updates the branch first.
 - Failure handling: Composer or theme failures prevent publication; sync or
@@ -128,12 +130,16 @@ Edit a component under `config/application` or a temporary copy of a project's
 parameters, then repeat packing, processing and the relevant tests. Generated
 files in `/tmp` are inspection outputs, not the source to edit.
 
-For real CircleCI execution, start with the [Unity 1 evaluation
-guide](../examples/unity1/README.md). First, add the setup template and
-parameter file to a test branch in the application repository. The shared
-changes must also be published to `webdev-ci/main`. Setup and jobs fetch the
-latest `main` when they run; they cannot execute unpublished local changes
-through that path.
+For real CircleCI execution, follow the [corp-lite walkthrough](walkthroughs/corp-lite.md).
+Publish the shared branch and add the setup template and parameter file to an
+application test branch. Set `shared_ci_ref` to `CORP-855` during the trial.
+Setup downloads that branch once and bundles its scripts into the configuration.
+Local changes must be published before CircleCI can use them.
 
-For all parameters, hooks, schedules and adoption details, see the [application
+The setup defaults to manual-only (`ci_action=none`). Trigger `checks` first.
+Later, set its default to `auto` for branch checks and configure the project's
+PR triggers. Each nightly schedule must explicitly pass `edge-build` or
+`edge-refresh`; the schedule name no longer selects the workflow.
+
+For all parameters, schedules and adoption details, see the [application
 CI reference](application-ci.md).

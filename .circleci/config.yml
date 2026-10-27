@@ -49,14 +49,14 @@ jobs:
           name: Test new application workflows offline
           command: |
             PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_application_ci.py
-            for script in scripts/edge/*.sh; do bash -n "$script"; done
-            yamllint -c .yamllint.yml config/application examples/application/setup.yml examples/unity1/setup.yml
+            for script in scripts/edge/*.sh scripts/pack-application.sh scripts/unpack-shared-tools.sh; do bash -n "$script"; done
+            yamllint -c .yamllint.yml config/application templates/application/setup.yml
       - run:
           name: Pack and compile new application workflows
           command: |
-            circleci config pack config/application > /tmp/application-ci.yml
+            bash scripts/pack-application.sh > /tmp/application-ci.yml
             circleci config validate /tmp/application-ci.yml
-            for parameters in examples/application/*.json examples/unity1/parameters.json; do
+            for parameters in templates/application/*.json; do
               for action in checks edge-build edge-refresh; do
                 jq --arg action "$action" '.ci_action = $action' \
                   "$parameters" > /tmp/application-parameters.json

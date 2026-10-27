@@ -33,11 +33,6 @@ run_drush() {
   # Some Origins QA commands log errors but return exit status zero.
   [[ $status == 0 ]] && ! grep -qiE '\[error\]|\[fatal\]' <<< "$output"
 }
-site_hook() {
-  [[ -n "${EDGE_SITE_HOOK:-}" ]] || return 0
-  [[ "$EDGE_SITE_HOOK" != /* && "$EDGE_SITE_HOOK" != *..* && -f "$EDGE_SITE_HOOK" ]] || return 1
-  bash -e "$EDGE_SITE_HOOK" "$1" "$site"
-}
 for site in "${sites[@]}"; do
   if [[ "$EDGE_LAYOUT" == multisite ]]; then
     [[ "$site" =~ ^[a-zA-Z0-9_-]+$ && -f "$app_root/project/sites/$site/settings.php" ]] || {
@@ -59,7 +54,6 @@ for site in "${sites[@]}"; do
       enabled=$(run_drush php:eval 'echo \Drupal::moduleHandler()->moduleExists("fastly") ? "yes" : "no";')
       [[ "$enabled" != yes ]] || run_drush pm:uninstall fastly
     fi
-    site_hook before-config
     run_drush cache:rebuild
     run_drush config:import
   fi
@@ -81,7 +75,6 @@ for site in "${sites[@]}"; do
   run_drush password_qa_accounts
   [[ "${EDGE_QA_STAFF:-false}" != true ]] || run_drush create_qa_staff_accounts
   [[ -z "${EDGE_AFTER_COMMAND:-}" ]] || run_drush "$EDGE_AFTER_COMMAND"
-  site_hook after-config
   run_drush cache:rebuild
   echo "Completed $site"
 done

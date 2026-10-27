@@ -20,7 +20,6 @@ docker:
       EDGE_FASTLY: << pipeline.parameters.fastly >>
       EDGE_QA_STAFF: << pipeline.parameters.qa_staff >>
       EDGE_AFTER_COMMAND: << pipeline.parameters.after_command >>
-      EDGE_SITE_HOOK: << pipeline.parameters.site_hook >>
 steps:
   - checkout_code:
       ssh_fingerprint: << parameters.ssh_fingerprint >>

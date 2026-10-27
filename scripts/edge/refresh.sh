@@ -7,7 +7,7 @@ target=(-p "$PLATFORM_PROJECT" -e "$EDGE_ENVIRONMENT")
 # Quote values once for the remote shell. Scripts travel over stdin, not a
 # mutable remote download. No backgrounding, polling or blanket retries.
 remote_env='env'
-for key in EDGE_BRANCH EDGE_LAYOUT EDGE_SITES EDGE_URI EDGE_PREFLIGHT EDGE_DEPLOY EDGE_CONTENT EDGE_FASTLY EDGE_QA_STAFF EDGE_AFTER_COMMAND EDGE_SITE_HOOK; do
+for key in EDGE_BRANCH EDGE_LAYOUT EDGE_SITES EDGE_URI EDGE_PREFLIGHT EDGE_DEPLOY EDGE_CONTENT EDGE_FASTLY EDGE_QA_STAFF EDGE_AFTER_COMMAND; do
   printf -v argument '%q' "$key=${!key:-}"
   remote_env+=" $argument"
 done

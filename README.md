@@ -15,18 +15,36 @@ check a project configuration.
 
 Existing projects keep using `shared-config.yml` until their own CircleCI setup
 is changed. Adding the new configuration does not switch their overnight builds.
-Both setups download shared code from `main`.
+The new setup downloads shared code once from `shared_ci_ref` (default `main`).
+Use `CORP-855` to test shared changes before merging them. Legacy jobs still use
+their existing downloads.
+
+For a visual overview, see the [legacy flow diagram](docs/legacy-flow.md) and
+the [new shared flow diagram](docs/application-flow.md).
 
 ## New application workflows
 
 - [Getting started](docs/getting-started.md): tools, packing and local evaluation.
 - [Application CI reference](docs/application-ci.md): parameters, scripts and adoption details.
-- [Unity 1 example](examples/unity1/README.md): sample configuration and commands to test it.
-- [Project examples](examples/application/): setup template and project parameters.
+- [Shared script bundle](docs/shared-script-bundle.md): how scripts are packed, unpacked and used by jobs.
+- [Corp-lite walkthrough](docs/walkthroughs/corp-lite.md): project setup and staged rollout.
+- [Unity 1 walkthrough](docs/walkthroughs/unity1.md): Unity-specific settings and testing.
+- [Application templates](templates/application/README.md): reusable starting files, not live project settings.
 
 To change a new job, start in `config/application`. The Edge scripts are in
 `scripts/edge`, and their tests are in `scripts/tests/test_application_ci.py`.
 Both old and new jobs use the root `phpcs.sh` helper.
+
+## Where files belong
+
+- `config/application/` and `scripts/`: shared implementation.
+- `templates/application/`: reusable starting files.
+- `docs/walkthroughs/`: project adoption and testing guides.
+- Each application repository: its actual `.circleci/config.yml` and
+  `.circleci/application.json`.
+
+Generate packed YAML in `/tmp` or as a CI artifact. Keep project-specific settings
+and generated snapshots out of this repository.
 
 ## Repository checks
 

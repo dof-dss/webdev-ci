@@ -1,0 +1,46 @@
+# Consumer template: copy one example parameter map to .circleci/application.json
+# Downloads shared configuration and scripts once from shared_ci_ref.
+version: 2.1
+setup: true
+parameters:
+  ci_action:
+    type: enum
+    enum: [none, auto, checks, edge-build, edge-refresh]
+    default: none
+  shared_ci_ref:
+    type: string
+    default: main
+orbs:
+  continuation: circleci/continuation@0.4.0
+  circleci-cli: circleci/circleci-cli@0.1.9
+jobs:
+  assemble:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - circleci-cli/install
+      - run:
+          name: Download and pack shared configuration
+          environment:
+            CI_ACTION: << pipeline.parameters.ci_action >>
+            SHARED_CI_REF: << pipeline.parameters.shared_ci_ref >>
+          command: |
+            set -euo pipefail
+            echo "Shared CI branch: $SHARED_CI_REF"
+            shared_ref=$(printf '%s' "$SHARED_CI_REF" | jq -sRr @uri)
+            shared_dir=$(mktemp -d /tmp/shared-ci.XXXXXX)
+            curl -fsSL "https://github.com/dof-dss/webdev-ci/archive/refs/heads/$shared_ref.tar.gz" \
+              | tar -xz --strip-components=1 -C "$shared_dir"
+            bash "$shared_dir/scripts/pack-application.sh" > /tmp/application-ci.yml
+            # Trigger parameters pass through automatically. Do not pass them twice.
+            jq 'if has("ci_action") or has("shared_ci_ref") then
+              error("Set ci_action and shared_ci_ref in setup or the trigger, not application.json")
+              else . end' .circleci/application.json > /tmp/application-parameters.json
+      - continuation/continue:
+          configuration_path: /tmp/application-ci.yml
+          parameters: /tmp/application-parameters.json
+workflows:
+  setup:
+    jobs:
+      - assemble

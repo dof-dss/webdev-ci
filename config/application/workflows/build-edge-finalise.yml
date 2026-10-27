@@ -1,18 +1,5 @@
 when:
-  or:
-    - equal:
-        - edge-refresh
-        - << pipeline.parameters.ci_action >>
-    - and:
-        - equal:
-            - auto
-            - << pipeline.parameters.ci_action >>
-        - equal:
-            - scheduled_pipeline
-            - << pipeline.trigger_source >>
-        - equal:
-            - edge_build_finalise
-            - << pipeline.schedule.name >>
+  equal: [edge-refresh, << pipeline.parameters.ci_action >>]
 jobs:
   - edge_refresh_shared:
       php_version: << pipeline.parameters.php_version >>

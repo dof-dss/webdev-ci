@@ -1,22 +1,11 @@
 {
-  "php_version": "8.3",
-  "drupal_core_version": "11.4",
   "coding_standards_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
   "custom_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins",
   "deprecated_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/modules/origins ${PROJECT_ROOT}/web/themes/custom",
   "edge_branch": "D8NID-edge",
   "edge_build_dofdss_packages": "dof-dss/nicsdru_origins_theme:dev-11.x-dev dof-dss/nicsdru_origins_modules:dev-11.x-dev",
-  "ignore_dirs": "/web/themes/custom/nicsdru_nidirect_theme/node_modules,/web/themes/custom/nicsdru_origins_theme/node_modules",
-  "ssh_fingerprint": "f8:f0:34:a1:0e:51:56:44:2b:9c:db:b7:2f:26:3b:48",
-  "layout": "single",
-  "preflight": "none",
-  "deploy": "standard",
+  "ignore_dirs": "web/themes/custom/nicsdru_nidirect_theme/node_modules web/themes/custom/nicsdru_origins_theme/node_modules",
+  "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
   "content": "structure-sync",
-  "fastly": "keep",
-  "qa_staff": false,
-  "after_command": "nidirect:hwt-cache-clear",
-  "theme_build_script": "",
-  "check_illegal_updates": false,
-  "build_themes": false,
-  "ci_action": "auto"
+  "after_command": "nidirect:hwt-cache-clear"
 }

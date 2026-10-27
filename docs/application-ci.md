@@ -3,27 +3,27 @@
 New to this structure? Follow the [5–10 minute getting-started
 guide](getting-started.md) before using this reference.
 
-This shared configuration covers Unity 1–4, corp-lite, DEPT and NIDirect. It
-retains the `edge_build` and `edge_build_finalise` schedules and their existing
-time separation. There is no wait/polling job or external coordinator.
+This shared configuration covers Unity 1–4, corp-lite, DEPT and NIDirect.
+Each project supplies only settings that differ from the defaults. Build and
+refresh still run on separate schedules, without a waiting job.
 
-The [legacy entry point](legacy-ci.md) remains `shared-config.yml`. Projects
-using that file keep their existing jobs. The new YAML files live under
-`config/application`. Use `circleci config pack` to combine them. Standalone
-theme and supporting-package workflows remain on the existing path.
+Existing projects keep using [shared-config.yml](legacy-ci.md) until they
+switch. New YAML lives under `config/application`. The packaging script bundles
+local scripts, then uses `circleci config pack` to assemble the YAML. Standalone
+theme and supporting-package jobs remain on the legacy path.
 
-For a Unity 1 Drupal 11 example and commands to test it, see
-[examples/unity1](../examples/unity1/README.md).
+For project setup and testing, see the [corp-lite walkthrough](walkthroughs/corp-lite.md)
+and [Unity 1 notes](walkthroughs/unity1.md).
 
 ## Source layout
 
 ```text
 config/application/
   @config.yml                  # Version and pipeline parameter declarations
-  commands/*.yml               # Shared steps and latest-main script loader
+  commands/*.yml               # Shared steps and bundled-script loader
   jobs/*.yml                   # Quality, Edge build and Edge refresh jobs
   workflows/*.yml              # Three shared workflow definitions
-examples/application/
+templates/application/
   unity.json                   # Plain CircleCI parameter maps
   corp-lite.json
   dept.json
@@ -38,7 +38,7 @@ contains the settings for that job or command; `@config.yml` holds the top-level
 settings.
 
 All projects use the same YAML, with parameters for project differences. The
-examples are starting points. Check versions, paths, SSH fingerprints and site
+templates are starting points. Check versions, paths, SSH fingerprints and site
 lists against your application branch before using them.
 
 ## Copy/paste local workflow
@@ -47,11 +47,11 @@ Run from the `webdev-ci` repository:
 
 ```bash
 # Offline assembly using the installed CircleCI CLI.
-circleci config pack config/application > /tmp/application.yml
+bash scripts/pack-application.sh > /tmp/application.yml
 
 # Check the configuration using CircleCI; this does not run jobs.
 circleci config validate /tmp/application.yml
-jq '.ci_action = "checks"' examples/application/corp-lite.json > /tmp/corp-lite-parameters.json
+jq '.ci_action = "checks"' templates/application/corp-lite.json > /tmp/corp-lite-parameters.json
 circleci config process /tmp/application.yml \
   --pipeline-parameters /tmp/corp-lite-parameters.json \
   > /tmp/corp-lite-processed.yml
@@ -85,9 +85,14 @@ also compiles each example with each action when this change is published.
 - `build-edge-finalise` copies data from the parent environment, then runs
   updates and QA setup for each site. The CircleCI job runs until this finishes.
 
-`ci_action=auto` selects the existing schedules, or ordinary quality checks for
-non-source-branch pushes. API runs with `ci_action=auto` do nothing. Explicit
-`checks`, `edge-build` and `edge-refresh` values select only that workflow.
+The setup defaults to `ci_action=none`: no application workflow runs until you
+choose an action. Manual runs use `checks`, `edge-build` or `edge-refresh`.
+Set the setup default to `auto` when ready for automatic checks on non-source
+branch pushes. Configure PR triggers in CircleCI if only PRs should run checks.
+
+Schedules must pass `ci_action=edge-build` or `ci_action=edge-refresh` explicitly.
+Their names can remain `edge_build` and `edge_build_finalise`, but names no longer
+select workflows. An `auto` scheduled or API run does nothing.
 
 | Parameter example | Layout | Update sequence | Additional behaviour |
 | --- | --- | --- | --- |
@@ -106,7 +111,7 @@ Each project JSON file supplies values for these CircleCI parameters:
 
 | Parameter | Meaning |
 | --- | --- |
-| `ci_action` | `auto`, `checks`, `edge-build`, `edge-refresh` |
+| `ci_action` | Trigger/setup setting: `none` (default), `auto`, `checks`, `edge-build`, `edge-refresh` |
 | `source_branch` | Source for the disposable Edge build; default `development` |
 | `edge_branch` | Git branch to publish and verify remotely |
 | `environment` | Upsun environment ID; empty uses `edge_branch` |
@@ -120,7 +125,6 @@ Each project JSON file supplies values for these CircleCI parameters:
 | `fastly` | `keep` or `uninstall`; uninstall requires standard update mode |
 | `qa_staff` | Also run QA staff-account creation |
 | `after_command` | One additional Drush command name, without shell arguments |
-| `site_hook` | Relative Bash script called with phase and site URI |
 | `build_themes` | Enable Node/native toolchain installation |
 | `theme_build_script` | Relative Bash script receiving `--sites-dir`; set together with `build_themes` |
 | `theme_sites_dir` | Relative theme sites directory |
@@ -129,37 +133,46 @@ Each project JSON file supplies values for these CircleCI parameters:
 
 Existing PHP, Node, code-path and SSH-fingerprint parameters remain available.
 CircleCI owns type/enum validation; the offline tests check example values too.
-Site hooks receive `before-config` (standard mode only) and `after-config` after
-imports/QA work. They execute from the deployed repository. Expected sites and
-configured hooks must exist. DEPT's existing `QA_USERNAMES` administrator
-creation remains in its hosted post-deploy hook.
+Expected sites must exist. DEPT's existing `QA_USERNAMES` administrator creation
+remains in its deployed post-deploy hook. Generic site hooks are not exposed.
 
 ## Set up an application project
 
-Copy `examples/application/setup.yml` to your project's `.circleci/config.yml`
-and its reviewed parameter example to `.circleci/application.json`. The setup
-template:
+Copy `templates/application/setup.yml` to the project's `.circleci/config.yml`
+and its parameter example to `.circleci/application.json`. Keep project checks
+such as Solr configset verification. The JSON contains only overrides; shared
+defaults live in `config/application/@config.yml`.
 
-1. Downloads the latest shared archive from `main`.
-2. Runs `circleci config pack` on its `config/application` directory.
-3. Uses `jq` to forward the requested `ci_action` with the project parameters.
-4. Passes the packed YAML and JSON parameter file to `continuation/continue`.
+Setup performs one download from `shared_ci_ref`, which defaults to `main`.
+Set its default to `CORP-855` in the project's setup file for the trial, or pass
+that value when triggering a pipeline. The shared branch must be published.
+No application repository is changed by publishing shared code alone.
 
-No Python or PyYAML is needed in project setup. Preserve project-specific setup
-checks such as Solr configset verification when adopting the template. Each job
-needing shared scripts fetches the latest `main` at the time it runs; PHPCS uses
-the wrapper from that archive too. Changes published to `main` reach projects
-automatically. If `main` changes between downloads, jobs in the same pipeline
-may use different versions.
+The packaging script includes a compressed copy of `scripts/edge` and `phpcs.sh`
+in the generated configuration. Jobs unpack those files locally, without another
+download. Each new pipeline gets the latest shared branch contents, and all jobs
+within it use the same snapshot. Workspaces cannot cross from setup into the
+continued workflows, so they are used only for dependencies within the checks
+workflow.
 
-Local packing can inspect uncommitted YAML. Running the new setup on CircleCI
-requires the new configuration and scripts to have been published to `main`
-first.
+See [how the script bundle works](shared-script-bundle.md) for the exact files,
+decoding command, exported paths and a way to inspect the archive locally.
 
-Supply `PLATFORM_PROJECT` and authentication through the application’s CircleCI
-environment; optionally supply `PLATFORM_APPLICATION_NAME` for multi-app
-projects. QA settings, including `QA_PASSWORD`, belong in the hosted
-environment, not parameter files.
+`ci_action` is declared in setup and the shared config. The pack script copies
+the selected setup action into the generated config default. Explicit trigger
+values also pass through automatically. Do not include `ci_action` or
+`shared_ci_ref` in `application.json`: passing the same trigger parameter again
+through continuation can cause a CircleCI parameter conflict. To enable `auto`
+by default, change only the setup default; the pack script carries that value through.
+
+Use `bash scripts/pack-application.sh` to produce runnable YAML. It calls the
+CircleCI CLI after adding the bundle; a direct pack of `config/application` is
+useful for inspecting structure but deliberately fails if a job needs scripts.
+The wrapper needs Bash, tar, base64, jq and the CircleCI CLI.
+
+Supply `PLATFORM_PROJECT` and credentials through the application's CircleCI
+settings. Set `PLATFORM_APPLICATION_NAME` for multi-app projects if needed.
+QA settings, including `QA_PASSWORD`, belong in the hosted environment.
 
 ## Before switching an existing project
 

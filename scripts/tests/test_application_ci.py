@@ -24,14 +24,15 @@ class ConfigTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.document = yaml.safe_load(subprocess.check_output(
-            ['circleci', 'config', 'pack', str(ROOT / 'config/application')], text=True))
+            ['bash', str(ROOT / 'scripts/pack-application.sh')], text=True))
 
     def test_native_pack_layout(self):
         doc = self.document
         self.assertEqual(set(doc['workflows']), {'build-test', 'build-edge', 'build-edge-finalise'})
         for section in ('jobs', 'commands', 'workflows'):
             for path in (ROOT / 'config/application' / section).glob('*.yml'):
-                self.assertEqual(doc[section][path.stem], yaml.safe_load(path.read_text()))
+                if path.stem != 'prepare_shared_tools':
+                    self.assertEqual(doc[section][path.stem], yaml.safe_load(path.read_text()))
         for definition in doc['workflows'].values():
             invoked = {name for job in definition['jobs'] for name in job}
             for job in definition['jobs']:
@@ -65,7 +66,9 @@ class ConfigTests(unittest.TestCase):
 
     def test_all_parameter_files_match_native_declarations(self):
         declarations = self.document['parameters']
-        for path in (ROOT / 'examples/application').glob('*.json'):
+        paths = list((ROOT / 'templates/application').glob('*.json'))
+        self.assertEqual({path.stem for path in paths}, {'unity', 'corp-lite', 'dept', 'nidirect'})
+        for path in paths:
             with self.subTest(project=path.stem):
                 values = json.loads(path.read_text())
                 self.assertFalse(set(values) - set(declarations))
@@ -103,43 +106,70 @@ class ConfigTests(unittest.TestCase):
             return {name for name, wf in self.document['workflows'].items() if evaluate(wf['when'])}
         self.assertEqual(selected('auto', 'development', 'webhook', ''), set())
         self.assertEqual(selected('auto', 'feature', 'webhook', ''), {'build-test'})
-        self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build'), {'build-edge'})
-        self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build_finalise'), {'build-edge-finalise'})
+        self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build'), set())
+        self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build_finalise'), set())
         self.assertEqual(selected('auto', 'edge', 'api', ''), set())
         for action, name in [('checks', 'build-test'), ('edge-build', 'build-edge'), ('edge-refresh', 'build-edge-finalise')]:
             self.assertEqual(selected(action, 'development', 'api', ''), {name})
+            self.assertEqual(selected(action, 'development', 'scheduled_pipeline', 'any-name'), {name})
+        for trigger in ('webhook', 'api', 'scheduled_pipeline'):
+            self.assertEqual(selected('none', 'feature', trigger, 'edge_build'), set())
 
-    def test_latest_main_loader_with_local_archive(self):
+    def test_bundled_scripts_match_checkout_without_download(self):
         import shutil
-        import tarfile
-        command = self.document['commands']['prepare_shared_tools']['steps'][0]['run']['command']
-        subprocess.run(['bash', '-n'], input=command, text=True, check=True)
+        run = self.document['commands']['prepare_shared_tools']['steps'][0]['run']
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            fixture = root / 'fixture'
-            (fixture / 'scripts/edge').mkdir(parents=True)
-            (fixture / 'scripts/edge/build.sh').write_text('fixture build')
-            (fixture / 'phpcs.sh').write_text('fixture phpcs')
-            archive = root / 'main.tar.gz'
-            with tarfile.open(archive, 'w:gz') as tar:
-                tar.add(fixture, arcname='webdev-ci-main')
-            executable(root / 'bin/curl',
-                '[[ "$*" == "-fsSL https://github.com/dof-dss/webdev-ci/archive/refs/heads/main.tar.gz" ]]\n'
-                'cat "$FIXTURE_ARCHIVE"\n')
-            env_file = root / 'bash-env'
+            env_file = Path(temp) / 'bash-env'
             env_file.touch()
-            result = subprocess.run(['bash', '-c', command + '\nprintf "%s" "$shared_dir"'],
-                env={**os.environ, 'PATH': f'{root}/bin:{os.environ["PATH"]}',
-                     'BASH_ENV': str(env_file), 'FIXTURE_ARCHIVE': str(archive)},
+            result = subprocess.run(['bash', '-c', run['command'] + '\nprintf "%s" "$shared_dir"'],
+                env={**os.environ, **run['environment'], 'BASH_ENV': str(env_file)},
                 capture_output=True, text=True, check=True)
             downloaded = Path(result.stdout)
             try:
-                self.assertEqual((downloaded / 'scripts/edge/build.sh').read_text(), 'fixture build')
-                self.assertEqual((downloaded / 'phpcs.sh').read_text(), 'fixture phpcs')
+                for original in [ROOT / 'phpcs.sh', *(ROOT / 'scripts/edge').glob('*.sh')]:
+                    self.assertEqual((downloaded / original.relative_to(ROOT)).read_bytes(), original.read_bytes())
                 self.assertIn('CI_SHARED_TOOLS=', env_file.read_text())
-                self.assertIn('CI_SHARED_ROOT=', env_file.read_text())
+                self.assertNotIn('curl', run['command'])
             finally:
                 shutil.rmtree(downloaded)
+
+    def test_setup_download_and_continuation_parameters(self):
+        # Execute the real setup shell with a local archive, including branch names with slashes.
+        import tarfile
+        for template in ('templates/application/setup.yml',):
+            setup = yaml.safe_load((ROOT / template).read_text())
+            self.assertEqual(setup['parameters']['ci_action']['default'],
+                             self.document['parameters']['ci_action']['default'])
+            steps = setup['jobs']['assemble']['steps']
+            run = next(step['run'] for step in steps if isinstance(step, dict)
+                       and isinstance(step.get('run'), dict) and 'environment' in step['run'])
+            self.assertIn('CI_ACTION', run['environment'])
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                archive = root / 'shared.tar.gz'
+                with tarfile.open(archive, 'w:gz') as tar:
+                    for name in ('config', 'scripts', 'phpcs.sh'):
+                        tar.add(ROOT / name, arcname='shared/' + name)
+                executable(root / 'bin/curl',
+                    '[[ "$*" == "-fsSL https://github.com/dof-dss/webdev-ci/archive/refs/heads/test%2Fbranch.tar.gz" ]]\n'
+                    'cat "$FIXTURE_ARCHIVE"\n')
+                (root / '.circleci').mkdir()
+                (root / '.circleci/application.json').write_text('{"layout":"multisite"}')
+                # Keep all outputs and the downloaded checkout inside this test directory.
+                command = run['command'].replace('/tmp/', str(root) + '/')
+                env = {**os.environ, 'PATH': f'{root}/bin:{os.environ["PATH"]}',
+                       'SHARED_CI_REF': 'test/branch', 'CI_ACTION': 'auto', 'FIXTURE_ARCHIVE': str(archive)}
+                subprocess.run(['bash', '-c', command], cwd=root, env=env, check=True,
+                               capture_output=True, text=True)
+                values = json.loads((root / 'application-parameters.json').read_text())
+                self.assertEqual(values, {'layout': 'multisite'})
+                packed = yaml.safe_load((root / 'application-ci.yml').read_text())
+                self.assertEqual(packed['parameters']['ci_action']['default'], 'auto')
+                self.assertIn('CI_SHARED_BUNDLE', packed['commands']['prepare_shared_tools']['steps'][0]['run']['environment'])
+                (root / '.circleci/application.json').write_text('{"ci_action":"edge-build"}')
+                failed = subprocess.run(['bash', '-c', command], cwd=root, env=env,
+                                        capture_output=True, text=True)
+                self.assertNotEqual(failed.returncode, 0)
 
 
 class RuntimeTests(unittest.TestCase):

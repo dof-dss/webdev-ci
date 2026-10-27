@@ -1,10 +1,7 @@
+# scripts/pack-application.sh replaces this command with the local script bundle.
 steps:
   - run:
-      name: Load latest shared scripts from main
+      name: Require bundled shared scripts
       command: |
-        set -euo pipefail
-        shared_dir=$(mktemp -d /tmp/webdev-ci.XXXXXX)
-        curl -fsSL "https://github.com/dof-dss/webdev-ci/archive/refs/heads/main.tar.gz" \
-          | tar -xz --strip-components=1 -C "$shared_dir"
-        printf 'export CI_SHARED_TOOLS=%q\n' "$shared_dir/scripts/edge" >> "$BASH_ENV"
-        printf 'export CI_SHARED_ROOT=%q\n' "$shared_dir" >> "$BASH_ENV"
+        echo 'Pack with bash scripts/pack-application.sh to include shared scripts.' >&2
+        exit 1
