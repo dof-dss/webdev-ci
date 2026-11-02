@@ -179,7 +179,7 @@ def main(argv=None):
     for command in ('plan', 'run'):
         sub = commands.add_parser(command)
         sub.add_argument('--project', required=True)
-        sub.add_argument('--parameters', help='Project parameter JSON; defaults to PROJECT/.circleci/application.json if present')
+        sub.add_argument('--parameters', help='Project parameter JSON; defaults to PROJECT/.circleci/parameters.json')
         sub.add_argument('--config', dest='config_path', help='Use a packed application YAML file instead of composing the shared config directory')
         sub.add_argument('--skip-push', action='store_true', default=None, help='Skip Git preparation and publication (already the default for local Edge builds)')
         themes = sub.add_mutually_exclusive_group()
@@ -212,10 +212,11 @@ def main(argv=None):
     runner = Runner(args.state, args.shared_root)
     try:
         if args.command in {'plan', 'run'}:
-            parameters_path = Path(args.parameters) if args.parameters else Path(args.project) / '.circleci/application.json'
-            values = json.loads(parameters_path.read_text()) if parameters_path.exists() else {}
-            if args.parameters and not parameters_path.exists():
-                raise ValueError('Parameter file does not exist')
+            parameters_path = Path(args.parameters) if args.parameters else Path(args.project) / '.circleci/parameters.json'
+            if not parameters_path.is_file():
+                raise ValueError(f'Parameter file does not exist: {parameters_path}. '
+                                 'Create .circleci/parameters.json in the project or pass --parameters PATH.')
+            values = json.loads(parameters_path.read_text())
             if not isinstance(values, dict):
                 raise ValueError('Parameter file must contain a JSON object')
             for override in args.set:

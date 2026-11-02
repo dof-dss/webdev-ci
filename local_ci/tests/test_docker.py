@@ -42,7 +42,9 @@ class DockerSmokeTests(unittest.TestCase):
             document = _pack(shared)
             definition = document['jobs']['edge_build_shared']
             definition['docker'][0]['image'] = os.environ['LOCAL_CI_TEST_IMAGE']
-            definition['docker'][0]['user'] = '1000:1000'
+            # Preserve supplementary groups needed by this image's sudo entrypoint.
+            definition['docker'][0]['user'] = '1000'
+            definition['docker'][0]['environment']['XDEBUG_CLIENT_HOST'] = '127.0.0.1'
             # Exercise the real composed steps and bundled script, using fixture
             # executables instead of package downloads/native toolchain installs.
             definition['steps'].insert(1, {'run': {
@@ -53,8 +55,9 @@ class DockerSmokeTests(unittest.TestCase):
                     step['when']['steps'] = [{'run': {'name': 'Fixture theme toolchain', 'command': 'echo toolchain-ready'}}]
             composed = root / 'composed.yml'
             composed.write_text(yaml.safe_dump(document))
-            parameters = json.loads((shared / 'templates/application/corp-lite.json').read_text())
-            parameters.update(ssh_fingerprint='', theme_build_script='scripts/build-theme.sh')
+            parameters = json.loads((shared / 'templates/application/multisite.json').read_text())
+            parameters.update(edge_build_dofdss_packages='fixture/package:^1',
+                              ssh_fingerprint='', theme_build_script='scripts/build-theme.sh')
             runner = Runner(root / 'state', shared)
             containers = []
 
@@ -77,7 +80,7 @@ class DockerSmokeTests(unittest.TestCase):
                         containers.append(info['container'])
                     logs = runner.logs(run_id)
                     self.assertEqual(result['state'], 'success', json.dumps(result, indent=2) + logs)
-                    self.assertIn('composer require --no-interaction dof-dss/nicsdru_origins_modules:dev-11.x', logs)
+                    self.assertIn('composer require --no-interaction fixture/package:^1', logs)
                     self.assertIn('publication skipped', logs)
                     self.assertEqual('toolchain-ready' in logs, themes)
                     self.assertEqual('theme-built' in logs, themes)
@@ -112,7 +115,8 @@ class DockerSmokeTests(unittest.TestCase):
 
             def job(name, steps, requires=()):
                 return {'name': name, 'definition': name, 'requires': list(requires), 'config': {
-                    'docker': [{'image': os.environ['LOCAL_CI_TEST_IMAGE'], 'user': '1000:1000'}],
+                    'docker': [{'image': os.environ['LOCAL_CI_TEST_IMAGE'], 'user': '1000',
+                                'environment': {'XDEBUG_CLIENT_HOST': '127.0.0.1'}}],
                     'shell': '/bin/bash -euo pipefail', 'steps': steps}}
 
             plan = {'project': str(project), 'source': {'branch': 'local'}, 'workflows': {'checks': {'jobs': [
@@ -138,7 +142,7 @@ class DockerSmokeTests(unittest.TestCase):
                     self.assertIn('shell-env-ok', runner.logs(run_id))
                     self.assertIn('isolated-ok', runner.logs(run_id))
                     if attempt:
-                        self.assertIn('Cache restored:', runner.logs(run_id))
+                        self.assertIn('Restoring cache:', runner.logs(run_id))
                 self.assertEqual((project / 'marker').read_text(), 'original')
                 self.assertFalse((project / 'deps').exists())
                 self.assertEqual(len(set(containers)), 6)

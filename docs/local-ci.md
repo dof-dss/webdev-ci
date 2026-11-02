@@ -1,7 +1,7 @@
 # Local CI runner
 
 The local runner combines this checkout's shared application configuration with
-a project's `.circleci/application.json`, resolves a selected action and runs
+a project's `.circleci/parameters.json`, resolves a selected action and runs
 supported jobs in Docker. It is an MVP for debugging the new application
 workflows, not a complete CircleCI implementation.
 
@@ -28,12 +28,15 @@ webdev-ci shared configuration + project parameters
 
 The runner talks to the host Docker daemon through its socket. It creates
 separate job containers; it does not run Docker inside Docker. The Compose
-service holds persistent state in a named volume. Job source is a snapshot, so
+service stores persistent state in the host directory `./.local-ci`, mounted at `/state`. Job source is a snapshot, so
 commands in a job do not edit the project checkout.
 
 The socket gives the runner control of the Docker daemon. Use it only with
 configuration and project code you trust. The API binds to `127.0.0.1:8765` and
 requires a token; it should not be exposed as a public service.
+
+For copy/paste commands using the current corp-lite checkout, see
+[local corp-lite testing](walkthroughs/corp-lite-local.md).
 
 ## Configuration and execution
 
@@ -44,7 +47,6 @@ directory read-only at `/projects`:
 ```bash
 export LOCAL_CI_PROJECTS=/absolute/path/to/projects
 docker compose -f compose.local-ci.yml build
-docker compose -f compose.local-ci.yml up -d
 ```
 
 Building the runner downloads its base images, operating system packages and
@@ -58,35 +60,29 @@ it. Apple Silicon may need Docker's amd64 emulation for the default images.
 `LOCAL_CI_DOCKER_SOCKET` defaults to `/var/run/docker.sock`. Set it to your
 daemon's socket path if needed, for example with a rootless Linux setup.
 
-The following commands show the CLI as it runs inside the service, where shared
-configuration is mounted at `/shared` and the project root at `/projects`:
-
-```bash
-python -m local_ci plan \
-  --project /projects/example \
-  --parameters /projects/example/.circleci/application.json \
-  --action checks
-
-python -m local_ci run \
-  --project /projects/example \
-  --parameters /projects/example/.circleci/application.json \
-  --action checks \
-  --workflow build-test
-```
-
-Invoke those commands through Compose by replacing `python -m local_ci` with
-`docker compose -f compose.local-ci.yml run --rm local-ci`, for example:
+Run commands directly through Docker Compose. No host Python installation or
+`lci()` function is needed, and you do not need to start the HTTP service:
 
 ```bash
 docker compose -f compose.local-ci.yml run --rm local-ci plan \
   --project /projects/example \
-  --parameters /projects/example/.circleci/application.json \
-  --action checks
+  --set 'ssh_fingerprint=""' --action checks
+
+docker compose -f compose.local-ci.yml run --rm local-ci run \
+  --project /projects/example \
+  --set 'ssh_fingerprint=""' --action checks --workflow build-test --allow-network --live
 ```
+
+Paths refer to files inside the container. `/projects` is the host directory
+selected by `LOCAL_CI_PROJECTS`; `/shared` contains the shared configuration.
+Place temporary parameter files under a mounted directory, rather than host
+`/tmp`. See the [corp-lite recipe](walkthroughs/corp-lite-local.md) for a complete
+example. To use the optional HTTP API, start it separately with
+`docker compose -f compose.local-ci.yml up -d`.
 
 The CLI reads and writes local state directly. `run` stays attached until the
 run finishes; it does not require the HTTP server. Compose sets
-`LOCAL_CI_STATE=/state` and shares the named state volume with each CLI
+`LOCAL_CI_STATE=/state` and shares that host state directory with each CLI
 invocation. Native CLI use defaults to `.local-ci` unless `LOCAL_CI_STATE` is set.
 
 Use the workflow name reported by `plan`. Planning resolves configuration and
@@ -138,7 +134,8 @@ it cannot trigger an Upsun deployment through the shared publication script.
 Project scripts and Composer plugins still execute normally; review them for
 other external side effects before enabling network access.
 
-From `webdev-ci`, define a convenience command:
+From `webdev-ci`, the commands in this section use an optional shortcut for
+Docker Compose (the full form works equally well):
 
 ```bash
 lci() {
@@ -152,15 +149,13 @@ Replace `YOUR_CORP_LITE_DIRECTORY` with the actual checkout directory beneath
 ```bash
 lci plan \
   --project /projects/YOUR_CORP_LITE_DIRECTORY \
-  --parameters /projects/YOUR_CORP_LITE_DIRECTORY/.circleci/application.json \
   --action edge-build --no-build-themes
 ```
 
-If the project has not adopted `.circleci/application.json`, substitute
-`--parameters /projects/webdev-ci/templates/application/corp-lite.json` when
-`webdev-ci` is also beneath the mounted projects directory. That template
-currently selects `dof-dss/nicsdru_origins_modules:dev-11.x`; review the effective
-parameters against the project's intended build before executing.
+The runner defaults to the project's `.circleci/parameters.json`. It fails with
+that path in the error if the file is missing. Use `--parameters PATH` only when
+you intentionally want an alternate file. For corp-lite, use its project-owned
+settings rather than the generic template, whose package versions may differ.
 
 The plan should select `build-edge`, show `EDGE_SKIP_PUBLISH=true` in the
 expanded job environment, and omit the theme toolchain step. Prepare its Docker
@@ -169,13 +164,12 @@ image separately if it is not cached. Then execute the same selection:
 ```bash
 lci run \
   --project /projects/YOUR_CORP_LITE_DIRECTORY \
-  --parameters /projects/YOUR_CORP_LITE_DIRECTORY/.circleci/application.json \
   --action edge-build --workflow build-edge \
   --no-build-themes --allow-network
 ```
 
 No `--skip-push` or empty fingerprint override is required. The selected JSON
-parameter file (including `corp-lite.json`) supplies the fingerprint. If it is
+project-owned parameter file supplies the fingerprint. If it is
 absent or begins with `REPLACE_`, the runner looks in the project's
 `.circleci/config.yml`: either the parameter's declared default or static
 `continuation/continue` parameters. It does not execute setup shell commands.
@@ -317,9 +311,9 @@ use `docker inspect CONTAINER_ID`. Job command output is captured by the runner;
 use its `logs` command rather than the container's main-process log. Cleanup is
 manual in this version: remove only the reviewed container IDs with
 `docker rm CONTAINER_ID` when their debugging state is no longer needed. Do not
-remove the named state volume if you want to retain run history, workspace
+delete `./.local-ci` if you want to retain run history, workspace
 archives and caches. Stopping the service with
-`docker compose -f compose.local-ci.yml down` preserves that volume.
+`docker compose -f compose.local-ci.yml down` preserves that directory.
 
 ## HTTP API
 

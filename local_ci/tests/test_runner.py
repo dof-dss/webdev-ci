@@ -130,6 +130,25 @@ class RunnerTests(unittest.TestCase):
         self.assertIn('--exclude-standard', git.call_args.args[0])
         self.assertEqual(outside.read_text(), 'outside')
 
+    def test_exited_entrypoint_reports_logs_without_waiting(self):
+        original = self.docker.call
+
+        def stopped(*args, **kwargs):
+            if args[0] == 'exec' and '/tmp/local-ci-ready' in args:
+                raise subprocess.CalledProcessError(1, ['docker', *args])
+            if args[0] == 'inspect':
+                return b'exited'
+            if args[0] == 'logs':
+                return b'fixture entrypoint failure\n'
+            return original(*args, **kwargs)
+
+        with patch.object(self.docker, 'call', side_effect=stopped), patch('local_ci.runner.time.sleep') as sleep:
+            run_id, status = self.execute(self.plan(job('broken')))
+        self.assertEqual(status['state'], 'failed')
+        self.assertIn('entrypoint exited', status['jobs']['broken']['error'])
+        self.assertIn('fixture entrypoint failure', self.runner.logs(run_id))
+        sleep.assert_not_called()
+
     def test_success_retains_separate_containers_and_records_logs(self):
         run_id, status = self.execute(self.plan(job('first'), job('second', ['first'])))
         self.assertEqual(status['state'], 'success')

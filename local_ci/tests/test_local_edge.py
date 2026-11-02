@@ -27,8 +27,11 @@ class LocalEdgeTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.project = self.root / 'corp-lite'
         self.project.mkdir()
-        self.parameters = json.loads((SHARED / 'templates/application/corp-lite.json').read_text())
-        self.parameters['ssh_fingerprint'] = ''
+        self.parameters = json.loads((SHARED / 'templates/application/multisite.json').read_text())
+        # Test scenarios must not inherit optional features from a starter template.
+        self.parameters.update(edge_build_dofdss_packages='fixture/package:^1',
+                               ssh_fingerprint='', build_themes=False,
+                               theme_build_script='', check_illegal_updates=False)
         self.docker = FakeDocker()
         self.runner = Runner(self.root / 'state', SHARED, self.docker)
 
@@ -177,6 +180,27 @@ class LocalEdgeTests(unittest.TestCase):
         for value in ['true', 1, None]:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 request_plan(self.runner, {'project': str(self.project), 'skip_push': value})
+
+    def test_cli_defaults_to_project_parameters_and_keeps_overrides_local(self):
+        (self.project / '.circleci').mkdir()
+        path = self.project / '.circleci/parameters.json'
+        path.write_text(json.dumps({'ssh_fingerprint': 'project-key', 'layout': 'multisite'}))
+        with patch('local_ci.__main__.Runner', return_value=self.runner), \
+                patch('local_ci.__main__.request_plan', return_value={}) as compile_plan, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            result = main(['plan', '--project', str(self.project),
+                           '--set', 'ssh_fingerprint=""'])
+        self.assertEqual(result, 0)
+        self.assertEqual(compile_plan.call_args.args[1]['parameters'],
+                         {'ssh_fingerprint': '', 'layout': 'multisite'})
+        self.assertEqual(json.loads(path.read_text())['ssh_fingerprint'], 'project-key')
+
+    def test_cli_missing_default_parameters_reports_expected_path(self):
+        with patch('local_ci.__main__.Runner', return_value=self.runner), \
+                patch('sys.stderr', new_callable=io.StringIO) as errors:
+            result = main(['plan', '--project', str(self.project)])
+        self.assertNotEqual(result, 0)
+        self.assertIn(str(self.project / '.circleci/parameters.json'), errors.getvalue())
 
     def test_cli_theme_flags_override_parameter_file(self):
         parameters = self.project / 'params.json'

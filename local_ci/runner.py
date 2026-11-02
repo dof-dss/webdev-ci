@@ -119,7 +119,9 @@ class DockerCommandError(subprocess.CalledProcessError):
 class Docker:
     def call(self, *args, **kwargs):
         try:
-            return subprocess.run(['docker', *args], check=True, capture_output=True, **kwargs).stdout
+            result = subprocess.run(['docker', *args], check=True, capture_output=True, **kwargs)
+            # Docker returns container stderr separately even when fetching logs.
+            return result.stdout + result.stderr if args and args[0] == 'logs' else result.stdout
         except subprocess.CalledProcessError as error:
             raise DockerCommandError(error.returncode, error.cmd, output=error.stdout,
                                      stderr=error.stderr) from error
@@ -459,6 +461,11 @@ class Runner:
                         self.docker.call('exec', container, 'test', '-e', '/tmp/local-ci-ready')
                         break
                     except subprocess.CalledProcessError:
+                        state = self.docker.call('inspect', '--format', '{{.State.Status}}', container).decode().strip()
+                        if state in {'exited', 'dead'}:
+                            startup_log = self.docker.call('logs', '--tail', '50', container)
+                            log.write(startup_log)
+                            raise RuntimeError(f'Image entrypoint exited before job startup ({state}); see startup logs')
                         if time.monotonic() >= deadline:
                             raise RuntimeError('Image entrypoint did not finish startup within 60s')
                         time.sleep(0.1)

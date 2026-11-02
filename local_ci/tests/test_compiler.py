@@ -28,7 +28,7 @@ class CompilerTests(unittest.TestCase):
         selections = {'none': [], 'checks': ['build-test'],
                       'edge-build': ['build-edge'], 'edge-refresh': ['build-edge-finalise']}
         templates = list((ROOT / 'templates/application').glob('*.json'))
-        self.assertEqual(len(templates), 4, 'Expected all application templates to be available')
+        self.assertEqual({p.stem for p in templates}, {'single-site', 'multisite'})
         for template in templates:
             parameters = json.loads(template.read_text())
             for action, selected in selections.items():

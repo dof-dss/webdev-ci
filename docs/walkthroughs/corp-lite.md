@@ -6,22 +6,26 @@ for corp-lite belongs in corp-lite:
 ```text
 corp-lite/.circleci/
   config.yml          # Setup, shared branch and project setup checks
-  application.json    # Reviewed paths, package constraints, sites and Edge settings
+  parameters.json    # Reviewed paths, package constraints, sites and Edge settings
 ```
 
-This guide describes adoption; it does not mean the application has been migrated.
+The local corp-lite setup now uses this layout and starts in manual-only mode.
+Publication and hosted validation are separate rollout steps.
+
+For a local Docker trial without publishing branches, use the
+[local corp-lite commands](corp-lite-local.md).
 
 ## Prepare an application test branch
 
 Publish the shared implementation on `webdev-ci/CORP-855`. In a corp-lite test
 branch, copy the [setup template](../../templates/application/setup.yml) into
-`.circleci/config.yml` and use [corp-lite.json](../../templates/application/corp-lite.json)
-as the starting point for `.circleci/application.json`.
+`.circleci/config.yml` and use [multisite.json](../../templates/application/multisite.json)
+as the starting point for `.circleci/parameters.json`.
 
-Review the values against the application branch. The previously inspected
-`CORP-833--db-update` branch was Drupal 10, while the template's package constraint
-is for Drupal 11. Do not carry that constraint into a Drupal 10 build. Use the
-application's Composer files and current CI settings to choose the right one.
+The generic multisite template has placeholders, not corp-lite's settings.
+Corp-lite's canonical file is `.circleci/parameters.json` in its own repository.
+Keep its package constraints aligned with that application branch, including the
+Drupal 11 constraints on `D8UN-833`.
 
 In the project-owned files:
 
@@ -30,12 +34,11 @@ In the project-owned files:
 - Set the project's SSH fingerprint and review analysis paths and exclusions.
 - Set `source_branch` explicitly to the application branch intended for Edge.
 - Review `edge_branch`, `environment`, and the expected `sites` from the project's
-  `project/project.yml`. The template uses multisite mode, required preflight and
-  safe Structure Sync imports, with no theme build.
+  `project/project.yml`. Corp-lite explicitly enables required preflight and safe Structure Sync
+  imports in its own settings; those are not generic template defaults.
 
-The new setup no longer reads `.circleci/workflow-config.yml`. Remove that obsolete
-file in the application's adoption PR once no setup uses it; Git retains the
-previous configuration for rollback.
+The local adoption removes `.circleci/workflow-config.yml`; shared workflows
+now live in webdev-ci. Git retains the previous setup for rollback.
 
 ## Compile the configuration before running it
 
@@ -49,7 +52,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_application_ci.py
 circleci config validate /tmp/corp-lite-packed.yml
 for action in checks edge-build edge-refresh; do
   jq --arg action "$action" '.ci_action = $action' \
-    "$corp_lite_repo/.circleci/application.json" \
+    "$corp_lite_repo/.circleci/parameters.json" \
     > "/tmp/corp-lite-$action.parameters.json"
   circleci config process /tmp/corp-lite-packed.yml \
     --pipeline-parameters "/tmp/corp-lite-$action.parameters.json" \

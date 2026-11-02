@@ -24,10 +24,8 @@ config/application/
   jobs/*.yml                   # Quality, Edge build and Edge refresh jobs
   workflows/*.yml              # Three shared workflow definitions
 templates/application/
-  unity.json                   # Plain CircleCI parameter maps
-  corp-lite.json
-  dept.json
-  nidirect.json
+  multisite.json               # Generic multisite starting parameters
+  single-site.json             # Generic single-site starting parameters
   setup.yml                    # Consumer setup/continuation template
 scripts/edge/*.sh               # Executable build and refresh logic
 ```
@@ -51,7 +49,7 @@ bash scripts/pack-application.sh > /tmp/application.yml
 
 # Check the configuration using CircleCI; this does not run jobs.
 circleci config validate /tmp/application.yml
-jq '.ci_action = "checks"' templates/application/corp-lite.json > /tmp/corp-lite-parameters.json
+jq '.ci_action = "checks"' templates/application/multisite.json > /tmp/corp-lite-parameters.json
 circleci config process /tmp/application.yml \
   --pipeline-parameters /tmp/corp-lite-parameters.json \
   > /tmp/corp-lite-processed.yml
@@ -94,7 +92,10 @@ Schedules must pass `ci_action=edge-build` or `ci_action=edge-refresh` explicitl
 Their names can remain `edge_build` and `edge_build_finalise`, but names no longer
 select workflows. An `auto` scheduled or API run does nothing.
 
-| Parameter example | Layout | Update sequence | Additional behaviour |
+The templates describe only single-site and multisite layouts. Project-specific
+choices such as these belong in each project's own `.circleci/parameters.json`:
+
+| Project pattern | Layout | Update sequence | Additional behaviour |
 | --- | --- | --- | --- |
 | unity | Multisite | Required preflight, updatedb, config import | Theme build, Unity safe content importer, Fastly uninstall, parent-repo checks |
 | corp-lite | Multisite | Required preflight, updatedb, config import | Safe blocks/taxonomies and QA restoration per site |
@@ -139,7 +140,7 @@ remains in its deployed post-deploy hook. Generic site hooks are not exposed.
 ## Set up an application project
 
 Copy `templates/application/setup.yml` to the project's `.circleci/config.yml`
-and its parameter example to `.circleci/application.json`. Keep project checks
+and its parameter example to `.circleci/parameters.json`. Keep project checks
 such as Solr configset verification. The JSON contains only overrides; shared
 defaults live in `config/application/@config.yml`.
 
@@ -161,7 +162,7 @@ decoding command, exported paths and a way to inspect the archive locally.
 `ci_action` is declared in setup and the shared config. The pack script copies
 the selected setup action into the generated config default. Explicit trigger
 values also pass through automatically. Do not include `ci_action` or
-`shared_ci_ref` in `application.json`: passing the same trigger parameter again
+`shared_ci_ref` in `parameters.json`: passing the same trigger parameter again
 through continuation can cause a CircleCI parameter conflict. To enable `auto`
 by default, change only the setup default; the pack script carries that value through.
 

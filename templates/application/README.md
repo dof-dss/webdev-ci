@@ -1,29 +1,46 @@
 # Application starting points
 
-These files help a Drupal application adopt the shared jobs. They are templates,
-not copies of any project's live configuration.
+Choose a layout, then keep the reviewed settings in the application's own repo:
 
-1. Copy `setup.yml` to the application's `.circleci/config.yml`.
-2. Choose `corp-lite.json`, `unity.json`, `dept.json` or `nidirect.json`, review its
-   settings, and copy it to the application's `.circleci/application.json`.
-3. Replace the SSH fingerprint placeholder with the project's CircleCI key
-   fingerprint. Review package constraints, paths, target branch and site settings.
-4. Preserve project setup checks, such as Solr configset verification.
+| File | Starting layout |
+| --- | --- |
+| `single-site.json` | One Drupal installation using `web/` and a single Drush URI |
+| `multisite.json` | Several sites under `project/sites/`, with `web/` as the Drupal root |
+| `setup.yml` | CircleCI setup that loads shared jobs and project parameters |
 
-The setup starts in manual-only mode (`ci_action=none`). Its shared branch defaults
-to `main`; choose `CORP-855` for a trial of that published branch. Set these in
-setup or the pipeline trigger, not in `application.json`.
+Copy `setup.yml` to the project's `.circleci/config.yml` and the chosen JSON file
+to `.circleci/parameters.json`. That project-owned JSON becomes the canonical
+settings file for both CircleCI and the local Docker runner. Templates do not
+supply settings at runtime or overwrite project files later.
 
-Package constraints are examples: the corp-lite, Unity and NIDirect templates
-use Drupal 11 package branches, while DEPT uses Drupal 10 branches. They must
-match the application you are adopting. Drupal itself is selected by the
-application's Composer files, not a shared CI version parameter.
+## Adapt the settings
 
-Keep the resulting project configuration in the application repository. Future
-changes to these templates do not update files already copied into projects.
-Generate packed YAML in `/tmp` or as a CI artifact; do not commit project snapshots
-here.
+- Replace the SSH fingerprint placeholder with the project's CircleCI key fingerprint.
+- Replace `REPLACE_WITH_PACKAGE:CONSTRAINT` with the actual Composer constraints
+  for Edge builds, separated by spaces. Match the application's Drupal version.
+- For multisite, replace `REPLACE_WITH_SITE_DIRECTORY_NAMES` with the expected
+  directory names, separated by spaces. These are names such as `site_a site_b`,
+  not URLs. An empty `sites` value instead discovers `project/sites/*/settings.php`,
+  excluding `default`.
+- For single-site, review the `uri` used by Drush (`default` initially).
+- Review PHP version, analysis paths, ignored directories, application source
+  branch and Edge target. Remove analysis paths that do not exist in the project.
+- Preserve project setup checks, such as Solr configset verification.
 
-See the [corp-lite walkthrough](../../docs/walkthroughs/corp-lite.md),
+These generic templates use shared defaults for optional behaviour: no theme
+build, content import, required preflight or Unity parent check. Add options such
+as `content`, `preflight`, `deploy`, `build_themes` and `check_illegal_updates` to
+project parameters only when needed. See the [parameter reference](../../docs/application-ci.md).
+
+Placeholders allow configuration inspection but must be replaced before hosted
+execution or a real Edge package build. Drupal itself is selected by the
+application's Composer files.
+
+Setup starts in manual-only mode (`ci_action=none`), with shared code from `main`.
+Choose `CORP-855` to trial that published shared branch. Set `ci_action` and
+`shared_ci_ref` in setup or the trigger, not in `parameters.json`.
+
+Keep project configuration in its own repository. Generate packed YAML in `/tmp`
+or as a CI artifact. See the [corp-lite walkthrough](../../docs/walkthroughs/corp-lite.md),
 [Unity 1 walkthrough](../../docs/walkthroughs/unity1.md) and
 [getting-started guide](../../docs/getting-started.md).

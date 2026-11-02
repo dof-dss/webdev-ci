@@ -1,4 +1,4 @@
-# Consumer template: copy one example parameter map to .circleci/application.json
+# Consumer template: copy one example parameter map to .circleci/parameters.json
 # Downloads shared configuration and scripts once from shared_ci_ref.
 version: 2.1
 setup: true
@@ -35,8 +35,8 @@ jobs:
             bash "$shared_dir/scripts/pack-application.sh" > /tmp/application-ci.yml
             # Trigger parameters pass through automatically. Do not pass them twice.
             jq 'if has("ci_action") or has("shared_ci_ref") then
-              error("Set ci_action and shared_ci_ref in setup or the trigger, not application.json")
-              else . end' .circleci/application.json > /tmp/application-parameters.json
+              error("Set ci_action and shared_ci_ref in setup or the trigger, not parameters.json")
+              else . end' .circleci/parameters.json > /tmp/application-parameters.json
       - continuation/continue:
           configuration_path: /tmp/application-ci.yml
           parameters: /tmp/application-parameters.json

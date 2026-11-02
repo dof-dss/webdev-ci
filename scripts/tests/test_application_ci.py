@@ -67,7 +67,7 @@ class ConfigTests(unittest.TestCase):
     def test_all_parameter_files_match_native_declarations(self):
         declarations = self.document['parameters']
         paths = list((ROOT / 'templates/application').glob('*.json'))
-        self.assertEqual({path.stem for path in paths}, {'unity', 'corp-lite', 'dept', 'nidirect'})
+        self.assertEqual({path.stem for path in paths}, {'single-site', 'multisite'})
         for path in paths:
             with self.subTest(project=path.stem):
                 values = json.loads(path.read_text())
@@ -154,7 +154,7 @@ class ConfigTests(unittest.TestCase):
                     '[[ "$*" == "-fsSL https://github.com/dof-dss/webdev-ci/archive/refs/heads/test%2Fbranch.tar.gz" ]]\n'
                     'cat "$FIXTURE_ARCHIVE"\n')
                 (root / '.circleci').mkdir()
-                (root / '.circleci/application.json').write_text('{"layout":"multisite"}')
+                (root / '.circleci/parameters.json').write_text('{"layout":"multisite"}')
                 # Keep all outputs and the downloaded checkout inside this test directory.
                 command = run['command'].replace('/tmp/', str(root) + '/')
                 env = {**os.environ, 'PATH': f'{root}/bin:{os.environ["PATH"]}',
@@ -166,7 +166,7 @@ class ConfigTests(unittest.TestCase):
                 packed = yaml.safe_load((root / 'application-ci.yml').read_text())
                 self.assertEqual(packed['parameters']['ci_action']['default'], 'auto')
                 self.assertIn('CI_SHARED_BUNDLE', packed['commands']['prepare_shared_tools']['steps'][0]['run']['environment'])
-                (root / '.circleci/application.json').write_text('{"ci_action":"edge-build"}')
+                (root / '.circleci/parameters.json').write_text('{"ci_action":"edge-build"}')
                 failed = subprocess.run(['bash', '-c', command], cwd=root, env=env,
                                         capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0)

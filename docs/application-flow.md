@@ -11,7 +11,7 @@ flowchart TD
 
     subgraph application["Application repository: Unity, corp-lite, DEPT or NIDirect"]
         setup["Setup: checkout and keep project-specific checks"]
-        settings[".circleci/application.json: project parameters"]
+        settings[".circleci/parameters.json: project parameters"]
     end
 
     shared["webdev-ci: config/application YAML files"]

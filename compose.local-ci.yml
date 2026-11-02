@@ -22,6 +22,3 @@ services:
       - ./config/application:/shared/config/application:ro
       - ./scripts:/shared/scripts:ro
       - ./phpcs.sh:/shared/phpcs.sh:ro
-
-volumes:
-  local-ci-state:

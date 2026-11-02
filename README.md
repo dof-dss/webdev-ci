@@ -42,7 +42,8 @@ Both old and new jobs use the root `phpcs.sh` helper.
 - `templates/application/`: reusable starting files.
 - `docs/walkthroughs/`: project adoption and testing guides.
 - Each application repository: its actual `.circleci/config.yml` and
-  `.circleci/application.json`.
+  `.circleci/parameters.json`. The local runner reads that file automatically;
+  use command-line overrides for local-only differences.
 
 Generate packed YAML in `/tmp` or as a CI artifact. Keep project-specific settings
 and generated snapshots out of this repository.

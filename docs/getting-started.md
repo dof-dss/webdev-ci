@@ -58,13 +58,13 @@ present: packing combines files; processing resolves those references.
 
 ## 3. Choose a project and inspect its checks
 
-This example uses corp-lite. Substitute `unity.json`, `dept.json` or
-`nidirect.json` for another project. For an adopted project, use its own
-`.circleci/application.json` instead. Templates contain placeholder settings
+This example uses the generic multisite template. Use `single-site.json` for
+a single Drupal installation. For an adopted project, use its own
+`.circleci/parameters.json` instead. Templates contain placeholder settings
 and are suitable here for compilation, not hosted execution.
 
 ```bash
-jq '.ci_action = "checks"' templates/application/corp-lite.json \
+jq '.ci_action = "checks"' templates/application/multisite.json \
   > /tmp/webdev-ci-parameters.json
 
 circleci config validate /tmp/webdev-ci.yml
