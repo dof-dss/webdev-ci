@@ -8,5 +8,9 @@
   "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
   "layout": "multisite",
   "preflight": "required",
-  "content": "structure-sync"
+  "content": "structure-sync",
+  "theme_build_script": "build-themes.sh",
+  "theme_asset_paths": ":(glob)project/sites/*/themes/*/css/**/*.css\n:(glob)project/sites/*/themes/*/images/**",
+  "check_illegal_updates": true,
+  "build_themes": true
 }

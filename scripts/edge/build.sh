@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # Run only in a disposable CI checkout. Publishes the configured Edge branch.
 set -euo pipefail
+case "${EDGE_SKIP_PUBLISH-false}" in
+  true)
+    bash "$(dirname "${BASH_SOURCE[0]}")/build-application.sh"
+    echo 'Local Edge build complete; publication skipped.'
+    exit 0
+    ;;
+  false) ;;
+  *) echo 'EDGE_SKIP_PUBLISH must be true or false' >&2; exit 1 ;;
+esac
 : "${EDGE_BRANCH:?}" "${SOURCE_BRANCH:?}" "${EDGE_PACKAGES:?}"
 [[ "$EDGE_BRANCH" != "$SOURCE_BRANCH" && "$EDGE_BRANCH" != main && "$EDGE_BRANCH" != master ]] || { echo 'Refusing to overwrite a source branch' >&2; exit 1; }
 git check-ref-format --branch "$EDGE_BRANCH" >/dev/null
@@ -13,12 +22,7 @@ source_sha=$(git rev-parse FETCH_HEAD)
 # Capture the lease before building; never overwrite a concurrent publisher.
 remote_sha=$(git ls-remote --heads origin "refs/heads/$EDGE_BRANCH" | awk '{print $1}')
 git checkout -B "$EDGE_BRANCH" "$source_sha"
-read -r -a packages <<< "$EDGE_PACKAGES"
-composer require --no-interaction "${packages[@]}"
-if [[ "${THEME_BUILD_SCRIPT:-}" != '' ]]; then
-  [[ -f "$THEME_BUILD_SCRIPT" && "$THEME_BUILD_SCRIPT" != /* && "$THEME_BUILD_SCRIPT" != *..* ]] || exit 1
-  bash -e "$THEME_BUILD_SCRIPT" --sites-dir "$PWD/${THEME_SITES_DIR:-project/sites}"
-fi
+bash "$(dirname "${BASH_SOURCE[0]}")/build-application.sh"
 git add -- composer.json composer.lock
 # Explicit newline-separated Git pathspecs, never 'git add .'. Include new assets.
 while IFS= read -r path; do

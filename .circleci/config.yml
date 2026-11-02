@@ -52,6 +52,11 @@ jobs:
             for script in scripts/edge/*.sh scripts/pack-application.sh scripts/unpack-shared-tools.sh; do bash -n "$script"; done
             yamllint -c .yamllint.yml config/application templates/application/setup.yml
       - run:
+          name: Test local workflow compiler and executor offline
+          command: |
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s local_ci/tests -v
+            PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_edge_local_build.py
+      - run:
           name: Pack and compile new application workflows
           command: |
             bash scripts/pack-application.sh > /tmp/application-ci.yml

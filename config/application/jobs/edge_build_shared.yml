@@ -19,6 +19,7 @@ docker:
       EDGE_BRANCH: << pipeline.parameters.edge_branch >>
       SOURCE_BRANCH: << pipeline.parameters.source_branch >>
       EDGE_PACKAGES: << pipeline.parameters.edge_build_dofdss_packages >>
+      THEME_BUILD_ENABLED: << parameters.build_themes >>
       THEME_BUILD_SCRIPT: << pipeline.parameters.theme_build_script >>
       THEME_SITES_DIR: << pipeline.parameters.theme_sites_dir >>
       THEME_ASSET_PATHS: << pipeline.parameters.theme_asset_paths >>

@@ -1,0 +1,27 @@
+services:
+  local-ci:
+    build:
+      context: .
+      dockerfile: local_ci/Dockerfile
+    init: true
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      LOCAL_CI_PLATFORM: ${LOCAL_CI_PLATFORM:-linux/amd64}
+      LOCAL_CI_TOKEN: ${LOCAL_CI_TOKEN:-}
+    volumes:
+      - ./.local-ci:/state
+      - type: bind
+        source: ${LOCAL_CI_PROJECTS:-..}
+        target: /projects
+        read_only: true
+      - type: bind
+        source: ${LOCAL_CI_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+      # Use current shared YAML/scripts without rebuilding the controller image.
+      - ./config/application:/shared/config/application:ro
+      - ./scripts:/shared/scripts:ro
+      - ./phpcs.sh:/shared/phpcs.sh:ro
+
+volumes:
+  local-ci-state:
