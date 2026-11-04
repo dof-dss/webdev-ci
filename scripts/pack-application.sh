@@ -14,7 +14,7 @@ esac
 sed -i "/^  ci_action:/,/^  source_branch:/s/default: none/default: ${CI_ACTION:-none}/" \
   "$pack_dir/application/@config.yml"
 # 1. Archive only the files jobs need, preserving their repository-relative paths.
-tar -czf "$pack_dir/scripts.tar.gz" -C "$repo_root" scripts/edge phpcs.sh
+tar -czf "$pack_dir/scripts.tar.gz" -C "$repo_root" scripts/edge scripts/phpstan phpcs.sh
 # 2. Encode the compressed archive as text for the generated YAML environment.
 #    Base64 is transport encoding, not encryption. Never add secrets here.
 base64 < "$pack_dir/scripts.tar.gz" | tr -d '\n' > "$pack_dir/bundle"

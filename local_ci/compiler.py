@@ -176,7 +176,7 @@ def _pack(shared_root):
         }
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode="w") as tar:
-        for relative in ("scripts/edge", "phpcs.sh"):
+        for relative in ("scripts/edge", "scripts/phpstan", "phpcs.sh"):
             tar.add(shared_root / relative, arcname=relative)
     bundle = base64.b64encode(gzip.compress(archive.getvalue(), mtime=0)).decode("ascii")
     document["commands"]["prepare_shared_tools"] = {"steps": [{"run": {

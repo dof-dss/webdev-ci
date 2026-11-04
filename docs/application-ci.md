@@ -207,3 +207,28 @@ uses only `config/application`.
 
 Edit the configuration your project uses. Apply fixes to both only when needed.
 Changes to the shared `phpcs.sh` helper affect both configurations.
+
+## Run the same deprecation checks with DDEV
+
+Corp-lite provides a host command:
+
+```bash
+ddev phpstan web/modules/origins/origins_workflow
+ddev phpstan web/modules/custom web/modules/origins web/themes/custom
+```
+
+Paths are relative to the application root. The command streams
+`scripts/phpstan/deprecations.sh` from the sibling webdev-ci checkout into DDEV.
+Set `WEBDEV_CI_DIR=/path/to/webdev-ci` for another checkout. CI bundles and runs
+that same script; publish shared changes to the selected shared branch before
+comparing hosted results. Both use the application's Composer-locked PHPStan
+and extensions, so install matching lockfiles locally and in CI.
+
+The script generates an explicit temporary configuration: level 2, Drupal and
+deprecation extensions, and the previous drupal-check exclusions for unsafe
+`new static()`, Drupal service-access advice and unused ignore comments.
+Project settings, fixture and node_modules paths are excluded. PHPStan's version
+notice may still appear. This command matches the deprecation job;
+the separate disallowed-functions job keeps `.circleci/phpstan.neon`.
+Extra options such as `--no-progress` are supported; configuration and level
+overrides are rejected. Analysis failures retain PHPStan's exit status.

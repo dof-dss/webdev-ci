@@ -14,6 +14,7 @@ docker:
 steps:
   - attach_workspace:
       at: ./
+  - prepare_shared_tools
   - run:
       name: Deprecated code check
-      command: cd $PROJECT_ROOT && vendor/bin/phpstan analyse --memory-limit=$PHP_INI_MEMORY_LIMIT << parameters.deprecated_code_dirs >>
+      command: cd $PROJECT_ROOT && bash "$CI_SHARED_ROOT/scripts/phpstan/deprecations.sh" << parameters.deprecated_code_dirs >>

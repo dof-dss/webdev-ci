@@ -101,7 +101,7 @@ class CompilerTests(unittest.TestCase):
         raw = base64.b64decode(step['environment']['CI_SHARED_BUNDLE'])
         with tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz') as archive:
             files = {member.name for member in archive.getmembers() if member.isfile()}
-            expected = {'phpcs.sh', *(str(path.relative_to(ROOT)) for path in (ROOT / 'scripts/edge').rglob('*') if path.is_file())}
+            expected = {'phpcs.sh', 'scripts/phpstan/deprecations.sh', *(str(path.relative_to(ROOT)) for path in (ROOT / 'scripts/edge').rglob('*') if path.is_file())}
             self.assertEqual(files, expected)
             for name in expected:
                 self.assertEqual(archive.extractfile(name).read(), (ROOT / name).read_bytes())

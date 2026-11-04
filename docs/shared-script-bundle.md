@@ -1,6 +1,6 @@
 # How shared scripts reach a job
 
-`CI_SHARED_BUNDLE` is a compressed copy of `scripts/edge/` and `phpcs.sh`, encoded
+`CI_SHARED_BUNDLE` is a compressed copy of `scripts/edge/`, `scripts/phpstan/` and `phpcs.sh`, encoded
 as Base64 text. It is generated output, not a setting to edit or a secret.
 
 Setup downloads the chosen shared branch once. Bundling keeps its YAML and scripts
@@ -19,7 +19,7 @@ bash scripts/pack-application.sh > /tmp/application.yml
 The script:
 
 1. Copies `config/application/` into a temporary directory.
-2. Archives `scripts/edge/` and `phpcs.sh` using `tar` and gzip.
+2. Archives `scripts/edge/`, `scripts/phpstan/` and `phpcs.sh` using `tar` and gzip.
 3. Base64-encodes that archive into `CI_SHARED_BUNDLE`.
 4. Generates `prepare_shared_tools` with both the bundle and the source of
    [unpack-shared-tools.sh](../scripts/unpack-shared-tools.sh).
@@ -46,9 +46,12 @@ This restores the following files in a new temporary directory inside that job:
   phpcs.sh
   scripts/edge/
     build.sh
+    build-application.sh
     guard.sh
     refresh.sh
     finalise.sh
+  scripts/phpstan/
+    deprecations.sh
 ```
 
 The unpacker writes two exports to `$BASH_ENV`. CircleCI loads that file in later
@@ -68,6 +71,7 @@ between jobs through a workspace.
 | --- | --- |
 | [edge_build_shared](../config/application/jobs/edge_build_shared.yml) | `bash "$CI_SHARED_TOOLS/build.sh"` |
 | [edge_refresh_shared](../config/application/jobs/edge_refresh_shared.yml) | `bash "$CI_SHARED_TOOLS/refresh.sh"` |
+| [deprecated_code_phpstan](../config/application/jobs/deprecated_code_phpstan.yml) | `bash "$CI_SHARED_ROOT/scripts/phpstan/deprecations.sh"` |
 | [coding_standards](../config/application/jobs/coding_standards.yml) | `bash "$CI_SHARED_ROOT/phpcs.sh"` with the project's analysis settings |
 
 The refresh script also reads `guard.sh` and `finalise.sh` from that directory

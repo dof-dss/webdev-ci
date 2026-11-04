@@ -10,6 +10,7 @@ COPY local_ci /shared/local_ci
 COPY config/application /shared/config/application
 COPY templates/application /shared/templates/application
 COPY scripts/edge /shared/scripts/edge
+COPY scripts/phpstan /shared/scripts/phpstan
 COPY scripts/unpack-shared-tools.sh /shared/scripts/unpack-shared-tools.sh
 COPY phpcs.sh /shared/phpcs.sh
 ENV LOCAL_CI_STATE=/state LOCAL_CI_SHARED_ROOT=/shared LOCAL_CI_PROJECTS_ROOT=/projects

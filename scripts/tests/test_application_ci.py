@@ -126,7 +126,7 @@ class ConfigTests(unittest.TestCase):
                 capture_output=True, text=True, check=True)
             downloaded = Path(result.stdout)
             try:
-                for original in [ROOT / 'phpcs.sh', *(ROOT / 'scripts/edge').glob('*.sh')]:
+                for original in [ROOT / 'phpcs.sh', *(ROOT / 'scripts/edge').glob('*.sh'), *(ROOT / 'scripts/phpstan').glob('*.sh')]:
                     self.assertEqual((downloaded / original.relative_to(ROOT)).read_bytes(), original.read_bytes())
                 self.assertIn('CI_SHARED_TOOLS=', env_file.read_text())
                 self.assertNotIn('curl', run['command'])

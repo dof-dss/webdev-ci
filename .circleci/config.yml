@@ -49,7 +49,7 @@ jobs:
           name: Test new application workflows offline
           command: |
             PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_application_ci.py
-            for script in scripts/edge/*.sh scripts/pack-application.sh scripts/unpack-shared-tools.sh; do bash -n "$script"; done
+            for script in scripts/edge/*.sh scripts/phpstan/*.sh scripts/pack-application.sh scripts/unpack-shared-tools.sh; do bash -n "$script"; done
             yamllint -c .yamllint.yml config/application templates/application/setup.yml
       - run:
           name: Test local workflow compiler and executor offline
