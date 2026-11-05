@@ -31,8 +31,9 @@ In the project-owned files:
 - Set the project's SSH fingerprint and review analysis paths and exclusions.
 - Set `source_branch` in setup or the trigger to the application branch intended for Edge.
 - Review `edge_branch`, `environment`, and the expected `sites` from the project's
-  `project/project.yml`. Corp-lite explicitly enables required preflight and safe Structure Sync
-  imports in its own settings; those are not generic template defaults.
+  `project/project.yml`. Corp-lite enables safe Structure Sync
+  imports in its own settings. The current Drupal 10 trial uses `preflight=none`;
+  only require preflight on branches that provide that command.
 
 The local adoption removes `.circleci/workflow-config.yml`; shared workflows
 now live in webdev-ci. Git retains the previous setup for rollback.
@@ -47,7 +48,7 @@ bash scripts/pack-application.sh > /tmp/corp-lite-packed.yml
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/tests/test_application_ci.py
 
 circleci config validate /tmp/corp-lite-packed.yml
-for action in checks edge-build edge-refresh; do
+for action in checks edge-build edge-finalise; do
   jq --arg action "$action" '.ci_action = $action' \
     "$corp_lite_repo/.circleci/parameters.json" \
     > "/tmp/corp-lite-$action.parameters.json"
@@ -71,13 +72,13 @@ Expect dependency installation followed by PHPCS and the two PHPStan checks.
 No Edge workflow should run.
 
 Before running Edge actions, obtain permission for the target operation. Verify
-the source branch, environment, parent data source, credentials, deployed
-`upgrade-preflight` command and QA settings.
+the source branch, environment, parent data source, credentials and QA settings. If `preflight=required` is selected, confirm
+`upgrade-preflight` is deployed first.
 
 - Trigger `ci_action=edge-build` with `edge_publish=false` first to inspect build artifacts.
   Set `edge_publish=true` explicitly when ready to publish Edge. A push
   can trigger an Upsun deployment.
-- After confirming deployment completed, trigger `ci_action=edge-refresh` to
+- After confirming deployment completed, trigger `ci_action=edge-finalise` to
   copy parent database/files and run updates, configuration/content imports and
   QA setup for every configured site.
 
@@ -94,7 +95,7 @@ pipeline checkout. Inspect every site and test QA logins afterwards.
    passing `ci_action=edge-build` and boolean `edge_publish=true`. Disable the old schedule for the same target
    before enabling its replacement.
 3. Keep refresh on a later, independent schedule. When adopting the new refresh
-   job, pass `ci_action=edge-refresh` and disable the old equivalent.
+   job, pass `ci_action=edge-finalise` and disable the old equivalent.
 4. Check the first overnight build, deployment, refresh and QA logins.
 
 The schedule gap allows time for deployment. Refresh does not check that the

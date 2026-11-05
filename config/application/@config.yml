@@ -34,7 +34,7 @@ parameters:
       - auto
       - checks
       - edge-build
-      - edge-refresh
+      - edge-finalise
     default: none
   edge_publish:
     type: boolean

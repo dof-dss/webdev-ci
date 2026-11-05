@@ -57,7 +57,7 @@ jobs:
             bash scripts/pack-application.sh > /tmp/application-ci.yml
             circleci config validate /tmp/application-ci.yml
             for parameters in templates/application/*.json; do
-              for action in checks edge-build edge-refresh; do
+              for action in checks edge-build edge-finalise; do
                 jq --arg action "$action" '.ci_action = $action' \
                   "$parameters" > /tmp/application-parameters.json
                 circleci config process /tmp/application-ci.yml \

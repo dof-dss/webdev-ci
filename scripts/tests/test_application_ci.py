@@ -28,7 +28,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_native_pack_layout(self):
         doc = self.document
-        self.assertEqual(set(doc['workflows']), {'build-test', 'build-edge', 'build-edge-finalise'})
+        self.assertEqual(set(doc['workflows']), {'build-test', 'build-edge', 'edge-finalise'})
         for section in ('jobs', 'commands', 'workflows'):
             for path in (ROOT / 'config/application' / section).glob('*.yml'):
                 if path.stem != 'prepare_shared_tools':
@@ -45,7 +45,7 @@ class ConfigTests(unittest.TestCase):
                 for key, declaration in declared.items():
                     if 'default' not in declaration:
                         self.assertIn(key, arguments)
-        self.assertNotIn('requires', doc['workflows']['build-edge-finalise']['jobs'][0]['edge_refresh_shared'])
+        self.assertNotIn('requires', doc['workflows']['edge-finalise']['jobs'][0]['edge_finalise_shared'])
 
     def test_legacy_and_application_entry_points_are_separate(self):
         legacy = yaml.safe_load((ROOT / 'shared-config.yml').read_text())
@@ -54,7 +54,7 @@ class ConfigTests(unittest.TestCase):
             for entry in definition['jobs']:
                 name = next(iter(entry))
                 self.assertIn(name, legacy['jobs'])
-                self.assertNotIn(name, {'edge_build_shared', 'edge_refresh_shared'})
+                self.assertNotIn(name, {'edge_build_shared', 'edge_finalise_shared'})
         self.assertFalse({'build_edge', 'sync_data', 'unity_edge_build', 'unity_sync_data'}
                          & set(self.document['jobs']))
         self.assertNotIn('composer_tasks__edge_packages', self.document['commands'])
@@ -109,7 +109,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build'), set())
         self.assertEqual(selected('auto', 'development', 'scheduled_pipeline', 'edge_build_finalise'), set())
         self.assertEqual(selected('auto', 'edge', 'api', ''), set())
-        for action, name in [('checks', 'build-test'), ('edge-build', 'build-edge'), ('edge-refresh', 'build-edge-finalise')]:
+        for action, name in [('checks', 'build-test'), ('edge-build', 'build-edge'), ('edge-finalise', 'edge-finalise')]:
             self.assertEqual(selected(action, 'development', 'api', ''), {name})
             self.assertEqual(selected(action, 'development', 'scheduled_pipeline', 'any-name'), {name})
         for trigger in ('webhook', 'api', 'scheduled_pipeline'):

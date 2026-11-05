@@ -5,7 +5,7 @@ settings for its versions, code paths, sites and Edge behaviour.
 
 ```mermaid
 flowchart TD
-    manual["Manual run: checks, edge-build or edge-refresh"] --> setup
+    manual["Manual run: checks, edge-build or edge-finalise"] --> setup
     push["Application branch push: auto"] --> setup
     schedules["Separate nightly schedules: build and later refresh"] --> setup
 
@@ -37,7 +37,7 @@ flowchart TD
     enabled -->|"true"| publish["Publish Edge branch if files changed; reject concurrent branch changes"]
     publish --> deploy["Upsun deployment triggered by branch push"]
 
-    select -->|"edge-refresh"| refresh["edge_refresh_shared: load shared scripts"]
+    select -->|"edge-finalise"| refresh["edge_finalise_shared: load shared scripts"]
     refresh --> guard["Check target is non-production and has expected branch"]
     guard --> sync["Copy parent database and files"]
     sync --> finalise["Check target again; run updates, config/content imports and QA setup per site"]

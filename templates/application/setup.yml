@@ -5,7 +5,7 @@ setup: true
 parameters:
   ci_action:
     type: enum
-    enum: [none, auto, checks, edge-build, edge-refresh]
+    enum: [none, auto, checks, edge-build, edge-finalise]
     default: none
   edge_publish:
     type: boolean

@@ -77,7 +77,7 @@ less /tmp/webdev-ci-processed.yml
 ```
 
 Look for the selected workflow, its jobs, PHP version and code paths. Change
-`"checks"` to `"edge-build"` or `"edge-refresh"` in the `jq` command to inspect
+`"checks"` to `"edge-build"` or `"edge-finalise"` in the `jq` command to inspect
 either Edge workflow. These commands only compile configuration; running the
 Edge builds publish only with `edge_publish=true`; refresh replaces hosted data.
 
@@ -139,7 +139,7 @@ Local changes must be published before CircleCI can use them.
 The setup defaults to manual-only (`ci_action=none`). Trigger `checks` first.
 Later, set its default to `auto` for branch checks and configure the project's
 PR triggers. Each nightly schedule must explicitly pass `edge-build` or
-`edge-refresh`; the schedule name no longer selects the workflow.
+`edge-finalise`; the schedule name no longer selects the workflow.
 
 For all parameters, schedules and adoption details, see the [application
 CI reference](application-ci.md).

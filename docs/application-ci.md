@@ -63,7 +63,7 @@ these need network access. `process` fills in parameters and expands reusable
 commands. CLI v1 does not execute jobs locally.
 
 To compile the Edge build or refresh workflow, set `ci_action` to `edge-build`
-or `edge-refresh` in the temporary parameter file instead. Do not overwrite the
+or `edge-finalise` in the temporary parameter file instead. Do not overwrite the
 project's parameter file merely to test a different action. Compiling only
 checks the configuration. Edge builds publish only with `edge_publish=true`; refresh replaces
 hosted data; selecting an action does not make it a dry run.
@@ -80,15 +80,15 @@ also compiles each example with each action when this change is published.
   parent-repository code when `check_illegal_updates` is true.
 - `build-edge` resolves development packages, optionally compiles themes and
   prepares the disposable Edge branch and artifacts; `edge_publish=true` enables publication.
-- `build-edge-finalise` copies data from the parent environment, then runs
+- `edge-finalise` copies data from the parent environment, then runs
   updates and QA setup for each site. The CircleCI job runs until this finishes.
 
 The setup defaults to `ci_action=none`: no application workflow runs until you
-choose an action. Manual runs use `checks`, `edge-build` or `edge-refresh`.
+choose an action. Manual runs use `checks`, `edge-build` or `edge-finalise`.
 Set the setup default to `auto` when ready for automatic checks on non-source
 branch pushes. Configure PR triggers in CircleCI if only PRs should run checks.
 
-Schedules must pass `ci_action=edge-build` or `ci_action=edge-refresh` explicitly.
+Schedules must pass `ci_action=edge-build` or `ci_action=edge-finalise` explicitly.
 Their names can remain `edge_build` and `edge_build_finalise`, but names no longer
 select workflows. An `auto` scheduled or API run does nothing.
 
@@ -98,7 +98,7 @@ choices such as these belong in each project's own `.circleci/parameters.json`:
 | Project pattern | Layout | Update sequence | Additional behaviour |
 | --- | --- | --- | --- |
 | unity | Multisite | Required preflight, updatedb, config import | Theme build, Unity safe content importer, Fastly uninstall, parent-repo checks |
-| corp-lite | Multisite | Required preflight, updatedb, config import | Safe blocks/taxonomies and QA restoration per site |
+| corp-lite | Multisite | updatedb, config import (no preflight on the current Drupal 10 trial) | Safe blocks/taxonomies and QA restoration per site |
 | dept | Single | Full Drush deploy, including deploy hooks | Safe content import and QA staff setup |
 | nidirect | Single | updatedb, config import | Safe content import and hospital waiting-times cache clear |
 
@@ -113,7 +113,7 @@ Setup/trigger settings and project JSON parameters are listed below. Keep `ci_ac
 
 | Parameter | Meaning |
 | --- | --- |
-| `ci_action` | Trigger/setup setting: `none` (default), `auto`, `checks`, `edge-build`, `edge-refresh` |
+| `ci_action` | Trigger/setup setting: `none` (default), `auto`, `checks`, `edge-build`, `edge-finalise` |
 | `source_branch` | Setup/trigger setting: source for Edge; default `development` |
 | `edge_publish` | Setup/trigger boolean: permit Git push; default `false` |
 | `edge_branch` | Git branch to publish and verify remotely |

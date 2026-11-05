@@ -70,7 +70,7 @@ between jobs through a workspace.
 | Job | What it runs after `prepare_shared_tools` |
 | --- | --- |
 | [edge_build_shared](../config/application/jobs/edge_build_shared.yml) | `bash "$CI_SHARED_TOOLS/build.sh"` |
-| [edge_refresh_shared](../config/application/jobs/edge_refresh_shared.yml) | `bash "$CI_SHARED_TOOLS/refresh.sh"` |
+| [edge_finalise_shared](../config/application/jobs/edge_finalise_shared.yml) | `bash "$CI_SHARED_TOOLS/refresh.sh"` |
 | [deprecated_code_phpstan](../config/application/jobs/deprecated_code_phpstan.yml) | `bash "$CI_SHARED_ROOT/scripts/phpstan/deprecations.sh"` |
 | [coding_standards](../config/application/jobs/coding_standards.yml) | `bash "$CI_SHARED_ROOT/phpcs.sh"` with the project's analysis settings |
 

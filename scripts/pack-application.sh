@@ -8,7 +8,7 @@ trap 'rm -rf "$pack_dir"' EXIT
 cp -R "$repo_root/config/application" "$pack_dir/application"
 # Bake the setup default into continuation too; defaults are otherwise independent.
 case "${CI_ACTION:-none}" in
-  none|auto|checks|edge-build|edge-refresh) ;;
+  none|auto|checks|edge-build|edge-finalise) ;;
   *) echo 'Unknown CI_ACTION' >&2; exit 1 ;;
 esac
 sed -i "/^  ci_action:/,/^  source_branch:/s/default: none/default: ${CI_ACTION:-none}/" \
