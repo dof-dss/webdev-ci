@@ -79,7 +79,7 @@ less /tmp/webdev-ci-processed.yml
 Look for the selected workflow, its jobs, PHP version and code paths. Change
 `"checks"` to `"edge-build"` or `"edge-refresh"` in the `jq` command to inspect
 either Edge workflow. These commands only compile configuration; running the
-Edge jobs would publish code or replace hosted data.
+Edge builds publish only with `edge_publish=true`; refresh replaces hosted data.
 
 ## 4. Run the offline tests (optional)
 
@@ -143,3 +143,6 @@ PR triggers. Each nightly schedule must explicitly pass `edge-build` or
 
 For all parameters, schedules and adoption details, see the [application
 CI reference](application-ci.md).
+
+For manual Edge inspection, pass `edge_publish=false` and `source_branch=development`
+in the pipeline trigger. Publishing schedules must explicitly set `edge_publish=true`.

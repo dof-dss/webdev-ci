@@ -158,13 +158,15 @@ class ConfigTests(unittest.TestCase):
                 # Keep all outputs and the downloaded checkout inside this test directory.
                 command = run['command'].replace('/tmp/', str(root) + '/')
                 env = {**os.environ, 'PATH': f'{root}/bin:{os.environ["PATH"]}',
-                       'SHARED_CI_REF': 'test/branch', 'CI_ACTION': 'auto', 'FIXTURE_ARCHIVE': str(archive)}
+                       'SHARED_CI_REF': 'test/branch', 'CI_ACTION': 'auto', 'CI_SOURCE_BRANCH': 'trial/source', 'CI_EDGE_PUBLISH': 'true', 'FIXTURE_ARCHIVE': str(archive)}
                 subprocess.run(['bash', '-c', command], cwd=root, env=env, check=True,
                                capture_output=True, text=True)
                 values = json.loads((root / 'application-parameters.json').read_text())
                 self.assertEqual(values, {'layout': 'multisite'})
                 packed = yaml.safe_load((root / 'application-ci.yml').read_text())
                 self.assertEqual(packed['parameters']['ci_action']['default'], 'auto')
+                self.assertEqual(packed['parameters']['source_branch']['default'], 'trial/source')
+                self.assertIs(packed['parameters']['edge_publish']['default'], True)
                 self.assertIn('CI_SHARED_BUNDLE', packed['commands']['prepare_shared_tools']['steps'][0]['run']['environment'])
                 (root / '.circleci/parameters.json').write_text('{"ci_action":"edge-build"}')
                 failed = subprocess.run(['bash', '-c', command], cwd=root, env=env,
@@ -269,6 +271,7 @@ class BuildTests(unittest.TestCase):
         self.env = {**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
                     'GIT_AUTHOR_NAME': 'Fixture', 'GIT_AUTHOR_EMAIL': 'fixture@example.invalid',
                     'GIT_COMMITTER_NAME': 'Fixture', 'GIT_COMMITTER_EMAIL': 'fixture@example.invalid',
+                    'EDGE_PUBLISH': 'true', 'EDGE_ARTIFACT_DIR': str(self.root / 'artifacts'),
                     'EDGE_BRANCH': 'edge', 'SOURCE_BRANCH': 'development', 'EDGE_PACKAGES': 'example/package:dev-main',
                     'PATH': f'{self.root}/bin:{os.environ["PATH"]}'}
         self.repo = self.root / 'work'
@@ -304,6 +307,35 @@ class BuildTests(unittest.TestCase):
         self.git('push', 'origin', 'development')
         self.assertEqual(self.build().returncode, 0)
         self.assertNotEqual(first, self.git('ls-remote', 'origin', 'refs/heads/edge'))
+
+    def test_no_publish_prepares_commit_and_artifacts_without_remote_changes(self):
+        self.assertEqual(self.build().returncode, 0)
+        previous = self.git('ls-remote', 'origin', 'refs/heads/edge')
+        executable(self.root / 'bin/composer', 'echo changed > composer.lock\n')
+        result = self.build(EDGE_PUBLISH='false')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('publication disabled', result.stdout)
+        self.assertEqual(self.git('ls-remote', 'origin', 'refs/heads/edge'), previous)
+        self.assertEqual(self.git('show', 'HEAD:composer.lock'), 'changed')
+        self.assertIn('composer.lock', (self.root / 'artifacts/build.patch').read_text())
+        self.assertEqual((self.root / 'artifacts/composer.lock').read_text(), 'changed\n')
+
+    def test_default_does_not_create_remote_edge(self):
+        self.env.pop('EDGE_PUBLISH')
+        result = self.build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.git('ls-remote', 'origin', 'refs/heads/edge'), '')
+
+    def test_alternate_source_branch(self):
+        self.git('checkout', '-b', 'trial/source')
+        (self.repo / 'marker.txt').write_text('alternate source\n')
+        self.git('add', 'marker.txt')
+        self.git('commit', '-m', 'alternate source')
+        self.git('push', 'origin', 'trial/source')
+        result = self.build(SOURCE_BRANCH='trial/source', EDGE_PUBLISH='false')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.git('show', 'HEAD:marker.txt'), 'alternate source')
+        self.assertNotEqual(self.build(EDGE_PUBLISH='invalid').returncode, 0)
 
     def test_composer_failure_does_not_publish(self):
         self.assertNotEqual(self.build(FAIL_COMPOSER='true').returncode, 0)

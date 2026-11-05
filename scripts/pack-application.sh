@@ -13,6 +13,16 @@ case "${CI_ACTION:-none}" in
 esac
 sed -i "/^  ci_action:/,/^  source_branch:/s/default: none/default: ${CI_ACTION:-none}/" \
   "$pack_dir/application/@config.yml"
+# Setup-resolved trigger parameters must also be the continuation defaults.
+case "${CI_EDGE_PUBLISH:-false}" in
+  true|false) ;;
+  *) echo 'CI_EDGE_PUBLISH must be true or false' >&2; exit 1 ;;
+esac
+source_branch=${CI_SOURCE_BRANCH:-development}
+git check-ref-format --branch "$source_branch" >/dev/null
+source_yaml=$(jq -Rn --arg value "$source_branch" '$value' | sed 's/[\\&|]/\\&/g')
+sed -i "/^  edge_publish:/,/^  source_branch:/s/default: false/default: ${CI_EDGE_PUBLISH:-false}/" "$pack_dir/application/@config.yml"
+sed -i "/^  source_branch:/,/^  environment:/s|default: development|default: $source_yaml|" "$pack_dir/application/@config.yml"
 # 1. Archive only the files jobs need, preserving their repository-relative paths.
 tar -czf "$pack_dir/scripts.tar.gz" -C "$repo_root" scripts/edge scripts/phpstan phpcs.sh
 # 2. Encode the compressed archive as text for the generated YAML environment.

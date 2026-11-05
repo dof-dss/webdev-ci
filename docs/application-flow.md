@@ -31,7 +31,10 @@ flowchart TD
     select -->|"edge-build"| build["edge_build_shared: load shared scripts"]
     build --> source["Fetch configured application source_branch"]
     source --> packages["Resolve packages and optionally compile themes"]
-    packages --> publish["Publish Edge branch if files changed; reject concurrent branch changes"]
+    packages --> artifacts["Prepare commit and save patch / Composer artifacts"]
+    artifacts --> enabled{"edge_publish?"}
+    enabled -->|"false (default)"| done["Finish without push"]
+    enabled -->|"true"| publish["Publish Edge branch if files changed; reject concurrent branch changes"]
     publish --> deploy["Upsun deployment triggered by branch push"]
 
     select -->|"edge-refresh"| refresh["edge_refresh_shared: load shared scripts"]

@@ -29,7 +29,7 @@ In the project-owned files:
 - Set `shared_ci_ref` to `CORP-855` in setup. Keep `ci_action=none` for manual testing.
 - Preserve the `scripts/solr/verify-configsets` step after checkout.
 - Set the project's SSH fingerprint and review analysis paths and exclusions.
-- Set `source_branch` explicitly to the application branch intended for Edge.
+- Set `source_branch` in setup or the trigger to the application branch intended for Edge.
 - Review `edge_branch`, `environment`, and the expected `sites` from the project's
   `project/project.yml`. Corp-lite explicitly enables required preflight and safe Structure Sync
   imports in its own settings; those are not generic template defaults.
@@ -74,7 +74,8 @@ Before running Edge actions, obtain permission for the target operation. Verify
 the source branch, environment, parent data source, credentials, deployed
 `upgrade-preflight` command and QA settings.
 
-- Trigger `ci_action=edge-build` to resolve packages and publish Edge. A push
+- Trigger `ci_action=edge-build` with `edge_publish=false` first to inspect build artifacts.
+  Set `edge_publish=true` explicitly when ready to publish Edge. A push
   can trigger an Upsun deployment.
 - After confirming deployment completed, trigger `ci_action=edge-refresh` to
   copy parent database/files and run updates, configuration/content imports and
@@ -90,7 +91,7 @@ pipeline checkout. Inspect every site and test QA logins afterwards.
    branch developers target, still selecting shared `CORP-855`, and verify a new
    PR and follow-up commit.
 2. Configure the nightly build on an application branch containing the new setup,
-   passing `ci_action=edge-build`. Disable the old schedule for the same target
+   passing `ci_action=edge-build` and boolean `edge_publish=true`. Disable the old schedule for the same target
    before enabling its replacement.
 3. Keep refresh on a later, independent schedule. When adopting the new refresh
    job, pass `ci_action=edge-refresh` and disable the old equivalent.

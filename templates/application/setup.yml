@@ -7,6 +7,12 @@ parameters:
     type: enum
     enum: [none, auto, checks, edge-build, edge-refresh]
     default: none
+  edge_publish:
+    type: boolean
+    default: false
+  source_branch:
+    type: string
+    default: development
   shared_ci_ref:
     type: string
     default: main
@@ -24,6 +30,8 @@ jobs:
           name: Download and pack shared configuration
           environment:
             CI_ACTION: << pipeline.parameters.ci_action >>
+            CI_EDGE_PUBLISH: << pipeline.parameters.edge_publish >>
+            CI_SOURCE_BRANCH: << pipeline.parameters.source_branch >>
             SHARED_CI_REF: << pipeline.parameters.shared_ci_ref >>
           command: |
             set -euo pipefail
@@ -34,8 +42,8 @@ jobs:
               | tar -xz --strip-components=1 -C "$shared_dir"
             bash "$shared_dir/scripts/pack-application.sh" > /tmp/application-ci.yml
             # Trigger parameters pass through automatically. Do not pass them twice.
-            jq 'if has("ci_action") or has("shared_ci_ref") then
-              error("Set ci_action and shared_ci_ref in setup or the trigger, not parameters.json")
+            jq 'if has("ci_action") or has("shared_ci_ref") or has("edge_publish") or has("source_branch") then
+              error("Set ci_action, shared_ci_ref, edge_publish and source_branch in setup or the trigger, not parameters.json")
               else . end' .circleci/parameters.json > /tmp/application-parameters.json
       - continuation/continue:
           configuration_path: /tmp/application-ci.yml

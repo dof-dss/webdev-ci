@@ -24,7 +24,7 @@ supply settings at runtime or overwrite project files later.
   excluding `default`.
 - For single-site, review the `uri` used by Drush (`default` initially).
 - Review PHP version, analysis paths, ignored directories, application source
-  branch and Edge target. Remove analysis paths that do not exist in the project.
+  branch (in setup) and Edge target. Remove analysis paths that do not exist in the project.
 - Preserve project setup checks, such as Solr configset verification.
 
 These generic templates use shared defaults for optional behaviour: no theme
@@ -37,8 +37,10 @@ execution or a real Edge package build. Drupal itself is selected by the
 application's Composer files.
 
 Setup starts in manual-only mode (`ci_action=none`), with shared code from `main`.
-Choose `CORP-855` to trial that published shared branch. Set `ci_action` and
-`shared_ci_ref` in setup or the trigger, not in `parameters.json`.
+Choose `CORP-855` to trial that published shared branch. Set `ci_action`, `shared_ci_ref`, `source_branch` and `edge_publish` in setup or
+the trigger, not in `parameters.json`. Source defaults to `development`; Edge
+publication defaults to `false`. Set `edge_publish=true` for actual publication,
+including nightly build schedules.
 
 Keep project configuration in its own repository. Generate packed YAML in `/tmp`
 or as a CI artifact. See the [corp-lite walkthrough](../../docs/walkthroughs/corp-lite.md),

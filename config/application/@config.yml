@@ -36,6 +36,9 @@ parameters:
       - edge-build
       - edge-refresh
     default: none
+  edge_publish:
+    type: boolean
+    default: false
   source_branch:
     type: string
     default: development

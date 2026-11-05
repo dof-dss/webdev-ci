@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Run only in a disposable CI checkout. Publishes the configured Edge branch.
 set -euo pipefail
+case "${EDGE_PUBLISH:-false}" in
+  true|false) ;;
+  *) echo 'EDGE_PUBLISH must be true or false' >&2; exit 1 ;;
+esac
 : "${EDGE_BRANCH:?}" "${SOURCE_BRANCH:?}" "${EDGE_PACKAGES:?}"
 [[ "$EDGE_BRANCH" != "$SOURCE_BRANCH" && "$EDGE_BRANCH" != main && "$EDGE_BRANCH" != master ]] || { echo 'Refusing to overwrite a source branch' >&2; exit 1; }
 git check-ref-format --branch "$EDGE_BRANCH" >/dev/null
@@ -21,6 +25,18 @@ while IFS= read -r path; do
 done <<< "${THEME_ASSET_PATHS:-}"
 if ! git diff --cached --quiet; then
   git commit -m 'Build Edge dependencies and assets'
+fi
+# Keep inspection output outside the checkout so it cannot enter the commit.
+artifact_dir=${EDGE_ARTIFACT_DIR:-/tmp/edge-build-artifacts}
+mkdir -p "$artifact_dir"
+git diff --binary "$source_sha" HEAD > "$artifact_dir/build.patch"
+git diff --stat "$source_sha" HEAD > "$artifact_dir/changes.txt"
+git show -s --format=fuller HEAD > "$artifact_dir/commit.txt"
+printf 'source_branch=%s\nsource_commit=%s\nedge_branch=%s\npublish=%s\n' "$SOURCE_BRANCH" "$source_sha" "$EDGE_BRANCH" "${EDGE_PUBLISH:-false}" > "$artifact_dir/build.txt"
+cp composer.json composer.lock "$artifact_dir/"
+if [[ "${EDGE_PUBLISH:-false}" == false ]]; then
+  echo "Edge build prepared at $(git rev-parse HEAD); publication disabled. Artifacts: $artifact_dir"
+  exit 0
 fi
 # Compare trees as generated commits have different timestamps across runs.
 if [[ -n "$remote_sha" ]]; then

@@ -16,6 +16,8 @@ docker:
     environment:
       PHP_EXTENSION_GD: 1
       PHP_INI_MEMORY_LIMIT: -1
+      EDGE_PUBLISH: << pipeline.parameters.edge_publish >>
+      EDGE_ARTIFACT_DIR: /tmp/edge-build-artifacts
       EDGE_BRANCH: << pipeline.parameters.edge_branch >>
       SOURCE_BRANCH: << pipeline.parameters.source_branch >>
       EDGE_PACKAGES: << pipeline.parameters.edge_build_dofdss_packages >>
@@ -44,6 +46,9 @@ steps:
               nvm use << parameters.node_version >>
               printf 'export PATH=%q\n' "$PATH" >> "$BASH_ENV"
   - run:
-      name: Prepare and publish Edge code and optional assets
+      name: Prepare Edge code and publish only when enabled
       command: bash "$CI_SHARED_TOOLS/build.sh"
       no_output_timeout: 20m
+  - store_artifacts:
+      path: /tmp/edge-build-artifacts
+      destination: edge-build

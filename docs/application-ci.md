@@ -65,7 +65,7 @@ commands. CLI v1 does not execute jobs locally.
 To compile the Edge build or refresh workflow, set `ci_action` to `edge-build`
 or `edge-refresh` in the temporary parameter file instead. Do not overwrite the
 project's parameter file merely to test a different action. Compiling only
-checks the configuration. Running an Edge workflow publishes code or replaces
+checks the configuration. Edge builds publish only with `edge_publish=true`; refresh replaces
 hosted data; selecting an action does not make it a dry run.
 
 Local packing tests inspect real CLI output and every example parameter map.
@@ -79,7 +79,7 @@ also compiles each example with each action when this change is published.
   disallowed-function checks in parallel. It also checks for changes to Unity
   parent-repository code when `check_illegal_updates` is true.
 - `build-edge` resolves development packages, optionally compiles themes and
-  publishes the disposable Edge branch.
+  prepares the disposable Edge branch and artifacts; `edge_publish=true` enables publication.
 - `build-edge-finalise` copies data from the parent environment, then runs
   updates and QA setup for each site. The CircleCI job runs until this finishes.
 
@@ -108,12 +108,14 @@ reindexing are added. Failed bootstraps, missing required commands and logged
 Drush errors fail the job, including QA commands which report an error but
 return status zero.
 
-Each project JSON file supplies values for these CircleCI parameters:
+Setup/trigger settings and project JSON parameters are listed below. Keep `ci_action`,
+`shared_ci_ref`, `source_branch` and `edge_publish` in setup or triggers, not project JSON.
 
 | Parameter | Meaning |
 | --- | --- |
 | `ci_action` | Trigger/setup setting: `none` (default), `auto`, `checks`, `edge-build`, `edge-refresh` |
-| `source_branch` | Source for the disposable Edge build; default `development` |
+| `source_branch` | Setup/trigger setting: source for Edge; default `development` |
+| `edge_publish` | Setup/trigger boolean: permit Git push; default `false` |
 | `edge_branch` | Git branch to publish and verify remotely |
 | `environment` | Upsun environment ID; empty uses `edge_branch` |
 | `edge_build_dofdss_packages` | Composer constraints used by the Edge build |
@@ -161,8 +163,8 @@ decoding command, exported paths and a way to inspect the archive locally.
 
 `ci_action` is declared in setup and the shared config. The pack script copies
 the selected setup action into the generated config default. Explicit trigger
-values also pass through automatically. Do not include `ci_action` or
-`shared_ci_ref` in `parameters.json`: passing the same trigger parameter again
+values also pass through automatically. Do not include `ci_action`, `shared_ci_ref`, `source_branch` or
+`edge_publish` in `parameters.json`: passing the same trigger parameter again
 through continuation can cause a CircleCI parameter conflict. To enable `auto`
 by default, change only the setup default; the pack script carries that value through.
 
@@ -179,7 +181,9 @@ QA settings, including `QA_PASSWORD`, belong in the hosted environment.
 
 The Edge build recreates its branch from the source branch; Edge-only manual
 commits are not preserved. Only Composer files and configured asset paths are
-staged. No-change builds succeed; source-only changes still publish. The script
+staged. Every build saves a binary patch, change summary, commit metadata and
+Composer files as CircleCI artifacts. With publication enabled, no-change builds
+succeed and source-only changes still publish. The script
 skips the push if the files are unchanged. It also rejects the push if another
 build has updated the Edge branch since this build checked it. This uses Git’s
 `--force-with-lease` option. Themes are compiled in CircleCI.
@@ -232,3 +236,25 @@ notice may still appear. This command matches the deprecation job;
 the separate disallowed-functions job keeps `.circleci/phpstan.neon`.
 Extra options such as `--no-progress` are supported; configuration and level
 overrides are rejected. Analysis failures retain PHPStan's exit status.
+
+## Manually evaluate Edge without a push
+
+Trigger a new corp-lite pipeline on the application `CORP-855` branch with:
+
+| Parameter | Value |
+| --- | --- |
+| `shared_ci_ref` | `CORP-855` |
+| `ci_action` | `edge-build` |
+| `source_branch` | `development`, or another published application branch |
+| `edge_publish` | `false` (boolean) |
+
+The build fetches the source branch, resolves packages, builds enabled themes and
+prepares the commit. It stops before pushing. Inspect `edge-build` in the job's
+Artifacts tab: `build.patch`, `changes.txt`, `commit.txt`, `build.txt`,
+`composer.json` and `composer.lock`. The binary patch contains committed asset
+changes selected by `theme_asset_paths`, excluding untracked dependency files.
+A no-push run does not test push permissions or deployment. Composer plugins and
+configured theme scripts still run normally.
+
+For real publication, explicitly set `edge_publish=true`. Nightly build schedules
+must also pass this boolean; the new default performs inspection only.
