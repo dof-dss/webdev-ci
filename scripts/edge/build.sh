@@ -2,7 +2,8 @@
 # Run only in a disposable CI checkout. Publishes the configured Edge branch.
 set -euo pipefail
 case "${EDGE_PUBLISH:-false}" in
-  true|false) ;;
+  true|1) EDGE_PUBLISH=true ;;
+  false|0) EDGE_PUBLISH=false ;;
   *) echo 'EDGE_PUBLISH must be true or false' >&2; exit 1 ;;
 esac
 : "${EDGE_BRANCH:?}" "${SOURCE_BRANCH:?}" "${EDGE_PACKAGES:?}"

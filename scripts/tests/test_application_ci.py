@@ -133,6 +133,15 @@ class ConfigTests(unittest.TestCase):
             finally:
                 shutil.rmtree(downloaded)
 
+    def test_numeric_publish_parameter_is_normalised_when_packing(self):
+        for value, expected in [('0', False), ('1', True)]:
+            result = subprocess.check_output(['bash', str(ROOT / 'scripts/pack-application.sh')],
+                env={**os.environ, 'CI_EDGE_PUBLISH': value}, text=True)
+            self.assertIs(yaml.safe_load(result)['parameters']['edge_publish']['default'], expected)
+        failed = subprocess.run(['bash', str(ROOT / 'scripts/pack-application.sh')],
+            env={**os.environ, 'CI_EDGE_PUBLISH': 'invalid'}, capture_output=True)
+        self.assertNotEqual(failed.returncode, 0)
+
     def test_setup_download_and_continuation_parameters(self):
         # Execute the real setup shell with a local archive, including branch names with slashes.
         import tarfile
@@ -312,13 +321,18 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(self.build().returncode, 0)
         previous = self.git('ls-remote', 'origin', 'refs/heads/edge')
         executable(self.root / 'bin/composer', 'echo changed > composer.lock\n')
-        result = self.build(EDGE_PUBLISH='false')
+        result = self.build(EDGE_PUBLISH='0', THEME_BUILD_ENABLED='0')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('publication disabled', result.stdout)
         self.assertEqual(self.git('ls-remote', 'origin', 'refs/heads/edge'), previous)
         self.assertEqual(self.git('show', 'HEAD:composer.lock'), 'changed')
         self.assertIn('composer.lock', (self.root / 'artifacts/build.patch').read_text())
         self.assertEqual((self.root / 'artifacts/composer.lock').read_text(), 'changed\n')
+
+    def test_numeric_true_enables_publication(self):
+        result = self.build(EDGE_PUBLISH='1', THEME_BUILD_ENABLED='0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(self.git('ls-remote', 'origin', 'refs/heads/edge'), '')
 
     def test_default_does_not_create_remote_edge(self):
         self.env.pop('EDGE_PUBLISH')

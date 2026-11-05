@@ -15,7 +15,8 @@ sed -i "/^  ci_action:/,/^  source_branch:/s/default: none/default: ${CI_ACTION:
   "$pack_dir/application/@config.yml"
 # Setup-resolved trigger parameters must also be the continuation defaults.
 case "${CI_EDGE_PUBLISH:-false}" in
-  true|false) ;;
+  true|1) CI_EDGE_PUBLISH=true ;;
+  false|0) CI_EDGE_PUBLISH=false ;;
   *) echo 'CI_EDGE_PUBLISH must be true or false' >&2; exit 1 ;;
 esac
 source_branch=${CI_SOURCE_BRANCH:-development}

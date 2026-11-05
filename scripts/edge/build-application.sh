@@ -7,7 +7,8 @@ if [[ -z "${THEME_BUILD_ENABLED+x}" ]]; then
   if [[ -n "${THEME_BUILD_SCRIPT:-}" ]]; then theme_enabled=true; else theme_enabled=false; fi
 fi
 case "$theme_enabled" in
-  true|false) ;;
+  true|1) theme_enabled=true ;;
+  false|0) theme_enabled=false ;;
   *) echo 'THEME_BUILD_ENABLED must be true or false' >&2; exit 1 ;;
 esac
 if [[ "$theme_enabled" == true ]]; then
