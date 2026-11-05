@@ -10,7 +10,7 @@ Choose a layout, then keep the reviewed settings in the application's own repo:
 
 Copy `setup.yml` to the project's `.circleci/config.yml` and the chosen JSON file
 to `.circleci/parameters.json`. That project-owned JSON becomes the canonical
-settings file for both CircleCI and the local Docker runner. Templates do not
+settings file for CircleCI. Templates do not
 supply settings at runtime or overwrite project files later.
 
 ## Adapt the settings

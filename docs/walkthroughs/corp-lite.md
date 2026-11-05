@@ -12,9 +12,6 @@ corp-lite/.circleci/
 The local corp-lite setup now uses this layout and starts in manual-only mode.
 Publication and hosted validation are separate rollout steps.
 
-For a local Docker trial without publishing branches, use the
-[local corp-lite commands](corp-lite-local.md).
-
 ## Prepare an application test branch
 
 Publish the shared implementation on `webdev-ci/CORP-855`. In a corp-lite test

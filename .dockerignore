@@ -1,6 +1,0 @@
-.git
-.local-ci
-.env
-.env.*
-**/__pycache__
-**/*.pyc

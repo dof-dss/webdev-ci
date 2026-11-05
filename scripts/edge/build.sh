@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 # Run only in a disposable CI checkout. Publishes the configured Edge branch.
 set -euo pipefail
-case "${EDGE_SKIP_PUBLISH-false}" in
-  true)
-    bash "$(dirname "${BASH_SOURCE[0]}")/build-application.sh"
-    echo 'Local Edge build complete; publication skipped.'
-    exit 0
-    ;;
-  false) ;;
-  *) echo 'EDGE_SKIP_PUBLISH must be true or false' >&2; exit 1 ;;
-esac
 : "${EDGE_BRANCH:?}" "${SOURCE_BRANCH:?}" "${EDGE_PACKAGES:?}"
 [[ "$EDGE_BRANCH" != "$SOURCE_BRANCH" && "$EDGE_BRANCH" != main && "$EDGE_BRANCH" != master ]] || { echo 'Refusing to overwrite a source branch' >&2; exit 1; }
 git check-ref-format --branch "$EDGE_BRANCH" >/dev/null

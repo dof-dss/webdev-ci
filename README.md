@@ -27,7 +27,6 @@ the [new shared flow diagram](docs/application-flow.md).
 - [Getting started](docs/getting-started.md): tools, packing and local evaluation.
 - [Application CI reference](docs/application-ci.md): parameters, scripts and adoption details.
 - [Shared script bundle](docs/shared-script-bundle.md): how scripts are packed, unpacked and used by jobs.
-- [Local CI runner](docs/local-ci.md): compose and inspect workflows, run supported jobs in Docker, and inspect local workspaces and logs.
 - [Corp-lite walkthrough](docs/walkthroughs/corp-lite.md): project setup and staged rollout.
 - [Unity 1 walkthrough](docs/walkthroughs/unity1.md): Unity-specific settings and testing.
 - [Application templates](templates/application/README.md): reusable starting files, not live project settings.
@@ -42,8 +41,7 @@ Both old and new jobs use the root `phpcs.sh` helper.
 - `templates/application/`: reusable starting files.
 - `docs/walkthroughs/`: project adoption and testing guides.
 - Each application repository: its actual `.circleci/config.yml` and
-  `.circleci/parameters.json`. The local runner reads that file automatically;
-  use command-line overrides for local-only differences.
+  `.circleci/parameters.json`.
 
 Generate packed YAML in `/tmp` or as a CI artifact. Keep project-specific settings
 and generated snapshots out of this repository.
