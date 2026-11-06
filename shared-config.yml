@@ -587,56 +587,37 @@ jobs:
           when: on_fail
           no_output_timeout: 30m
       - run:
-          name: Run any outstanding updates
+          name: Prepare and deploy Unity sites after data sync
           command: |
-            for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
-            do
-              result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
-              if [[ -n $result ]]; then
-                result2=$(platform drush "updb -l ${site} -y" -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Fastly (fastly)" || true) )
-            fi
-            done
-          no_output_timeout: 20m
-      - run:
-          name: Turn off fastly module to allow for cleaner config import
-          command: |
-            for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
-            do
-              result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
-              if [[ -n $result ]]; then
-                result2=$(platform drush "pml --status=enabled -l ${site}" -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Fastly (fastly)" || true) )
-                if [[ -n $result2 ]]; then
-                  echo "***** Uninstall Fastly - ${site} *****"
-                  platform drush "pmu fastly -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
-                fi
-            fi
-            done
-      - run:
-          name: Clear cache before config import
-          command: |
-            for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
-            do
-              result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
-              if [[ -n $result ]]; then
-                echo "***** Clear Cache - ${site} *****"
-                platform drush "cr -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
+            site_count=0
+            for settings in "$PROJECT_ROOT"/project/sites/*/settings.php; do
+              # PROJECT_ROOT is the CI checkout; settings is each matched settings.php path.
+              # Skip missing files and use the parent directory name as the Drush site URI.
+              [[ -f "$settings" ]] || continue
+              site=$(basename "$(dirname "$settings")")
+              [[ "$site" != default ]] || continue
+              [[ "$site" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "Invalid Unity site: $site" >&2; exit 1; }
+              site_count=$((site_count + 1))
+              echo "***** Prepare - $site *****"
+              # Suppress production Fastly purges before preflight saves config.
+              platform drush "php:eval '\Drupal::state()->set(\"fastly.state.valid_purge_credentials\", FALSE);' -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
+              # Site specific repairs must run before database updates are attempted.
+              platform drush "upgrade-preflight -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
+              fastly=$(platform drush "php:eval 'echo \Drupal::moduleHandler()->moduleExists(\"fastly\") ? 1 : 0;' -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH")
+              if [[ "$fastly" == 1 ]]; then
+                # Temporarily turn off fastly to reduce log noise.
+                platform drush "pm:uninstall fastly -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
               fi
+              echo "***** Deploy - $site *****"
+              # Drush deploy command wraps updb/config import in one convenient command.
+              platform drush "deploy -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
+              echo "***** Import blocks/taxonomies/menus - $site *****"
+              platform drush "import-all-if-installed safe -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
+              echo "***** Enable QA accounts - $site *****"
+              platform drush "bulk_update_qa_accounts enable -l $site" -y -p "$PLATFORM_PROJECT" -e "$EDGE_BUILD_BRANCH"
             done
-      - run:
-          name: Refresh configuration as our db will contain active prod config after sync operation
-          command: |
-            for site in `ls -l ~/project/project/sites | grep ^d | awk '!/default/{print $9}'`
-            do
-              result=$(platform drush "st -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH | (grep "Drupal bootstrap : Successful" || true) )
-              if [[ -n $result ]]; then
-                echo "***** Config Import - ${site} *****"
-                platform drush "cim -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
-                echo "***** Import blocks/taxonomies/menus - ${site} *****"
-                platform drush "import-all-if-installed safe -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
-                echo "***** Enable QA accounts - ${site} *****"
-                platform drush "bulk_update_qa_accounts enable -l ${site}" -y -p $PLATFORM_PROJECT -e $EDGE_BUILD_BRANCH
-              fi
-            done
+            (( site_count > 0 )) || { echo 'No Unity sites discovered' >&2; exit 1; }
+          no_output_timeout: 30m
 
   # THEMING repo jobs.
   theme_install:
