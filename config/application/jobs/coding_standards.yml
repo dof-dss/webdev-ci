@@ -1,0 +1,27 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  coding_standards_dirs:
+    type: string
+  ignore_dirs:
+    type: string
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PLATFORM_REGION: uk-1.platform.sh
+      PROJECT_ROOT: /home/docker/project
+      PHP_EXTENSION_GD: 1
+      PHP_INI_MEMORY_LIMIT: 1g
+steps:
+  - attach_workspace:
+      at: ./
+  - prepare_shared_tools
+  - run:
+      name: PHPCS analysis
+      shell: /bin/bash -eo pipefail
+      command: |
+        DRUPAL_DEPLOY_PATH="${PROJECT_ROOT}"
+        PHPCS_CHECK_DIRS="<< parameters.coding_standards_dirs >>"
+        IGNORE_DIRS="<< parameters.ignore_dirs >>"
+        exec bash "$CI_SHARED_ROOT/phpcs.sh" "${DRUPAL_DEPLOY_PATH}" "${PHPCS_CHECK_DIRS}" "${IGNORE_DIRS}"

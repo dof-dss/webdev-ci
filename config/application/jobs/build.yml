@@ -1,0 +1,21 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+  ssh_fingerprint:
+    type: string
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PLATFORM_REGION: uk-1.platform.sh
+      PROJECT_ROOT: /home/docker/project
+      PHP_EXTENSION_GD: 1
+      PHP_INI_MEMORY_LIMIT: 1g
+steps:
+  - checkout_code:
+      ssh_fingerprint: << parameters.ssh_fingerprint >>
+  - composer_tasks
+  - persist_to_workspace:
+      root: ./
+      paths:
+        - ./

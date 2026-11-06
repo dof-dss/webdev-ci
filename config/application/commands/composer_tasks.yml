@@ -1,0 +1,17 @@
+description: Validate and install dependencies using composer
+steps:
+  - run:
+      name: Validate composer.json and composer.lock file for consistency
+      command: composer validate --no-check-all --strict
+  - restore_cache:
+      keys:
+        - composer-vendor-{{ checksum "composer.lock" }}
+  - run:
+      name: Install dependencies
+      command: |
+        composer install --no-interaction --optimize-autoloader
+  - save_cache:
+      key: composer-vendor-{{ checksum "composer.lock" }}
+      paths:
+        - vendor
+        - ~/.composer/cache

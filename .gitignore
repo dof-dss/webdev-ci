@@ -61,3 +61,10 @@ yarn-debug.log
 # CircleCI local files
 .circleci-cli/
 process.yml
+
+# Python helpers
+__pycache__/
+*.pyc
+
+# Local workflow runner state (logs, source archives, tokens and caches)
+.local-ci/

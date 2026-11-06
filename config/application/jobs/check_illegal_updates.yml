@@ -1,0 +1,31 @@
+shell: /bin/bash -euo pipefail
+parameters:
+  php_version:
+    type: string
+docker:
+  - image: thecodingmachine/php:<< parameters.php_version >>-v4-fpm
+    environment:
+      PLATFORM_REGION: uk-1.platform.sh
+steps:
+  - attach_workspace:
+      at: ./
+  - hosts_keyscan
+  - run:
+      name: Check for updates made directly in this repo rather than in maestro-drupal-unity
+      command: |
+        git clone git@github.com:dof-dss/maestro-drupal-unity.git
+        echo "** Any failures in this section indicate that updates have been made directly in this repo "
+        echo "when they should have been made in https://github.com/dof-dss/maestro-drupal-unity and"
+        echo "pulled from the upstream repo using 'maestro pub' **"
+        echo "** checking composer.json  **"
+        diff maestro-drupal-unity/composer.json composer.json
+        echo "** checking composer.lock  **"
+        diff maestro-drupal-unity/composer.lock composer.lock
+        echo "** checking circleci/config.yml  **"
+        #diff maestro-drupal-unity/.circleci/config.yml .circleci/config.yml
+        echo "** checking platform.app.yaml **"
+        grep 'will be overwritten' .platform.app.yaml
+        echo "** checking site.settings.php  **"
+        diff maestro-drupal-unity/web/sites/site.settings.php web/sites/site.settings.php
+        echo "** checking sites.php  **"
+        diff maestro-drupal-unity/web/sites/sites.php web/sites/sites.php

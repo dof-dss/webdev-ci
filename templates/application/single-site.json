@@ -1,0 +1,12 @@
+{
+  "php_version": "8.3",
+  "edge_branch": "edge",
+  "edge_build_dofdss_packages": "REPLACE_WITH_PACKAGE:CONSTRAINT",
+  "coding_standards_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/themes/custom",
+  "deprecated_code_dirs": "${PROJECT_ROOT}/web/modules/custom ${PROJECT_ROOT}/web/themes/custom",
+  "custom_code_dirs": "${PROJECT_ROOT}/web/modules/custom",
+  "ignore_dirs": "web/themes/custom/*/node_modules",
+  "ssh_fingerprint": "REPLACE_WITH_PROJECT_SSH_KEY_FINGERPRINT",
+  "layout": "single",
+  "uri": "default"
+}
